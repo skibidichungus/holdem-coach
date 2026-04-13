@@ -17,7 +17,10 @@ The app runs in **guided mode**, where gameplay pauses between phases so you can
 - **Hand evaluation** — full poker hand ranking engine that detects all 10 hand types, including edge cases like ace-low straights
 - **Phase-by-phase teaching** — explains hole cards, community cards, and hand strength at every street
 - **Suggested actions** — highlights the recommended move with a visual badge, without forcing you to follow it
-- **Showdown resolution** — evaluates both hands and picks a winner with a clear explanation
+- **Hand strength meter** — a color-coded bar (Weak to Nuts) that shows how strong your current hand is at a glance
+- **Draw detection** — alerts you when you're one card away from a flush, straight, or have overcards on the board
+- **Detailed showdown** — names both hands, explains why one beats the other, and teaches hand hierarchy when the ranks are close
+- **Phase stepper** — a visual progress bar showing all five streets with completed, current, and upcoming phases
 
 ## Tech Stack
 
@@ -38,14 +41,14 @@ src/
     PokerTable.tsx        — main game layout
     CardView.tsx          — individual card rendering (face-up / face-down)
     ActionButtons.tsx     — fold / call / raise with suggested action badge
-    CoachPanel.tsx        — persistent coaching feedback panel
+    CoachPanel.tsx        — coaching panel with hand strength meter + draw alerts
     TutorialOverlay.tsx   — guided mode pause-and-explain overlay
-    PhaseBanner.tsx       — current street + pot display
+    PhaseBanner.tsx       — phase stepper with progress visualization + pot display
   lib/
     types.ts              — all shared types and enums
     deck.ts               — deck creation, shuffle, deal
     handEvaluator.ts      — hand ranking, scoring, and comparison
-    tutorial.ts           — coaching messages, recommendations, and feedback
+    tutorial.ts           — coaching messages, recommendations, feedback, hand strength, draw detection
   store/
     usePokerStore.ts      — Zustand store managing all game + tutorial state
 ```
@@ -74,7 +77,7 @@ Open [http://localhost:3000](http://localhost:3000) to play.
 ## What's Next
 
 - Quick-play mode (no tutorial pauses)
-- Draw detection in coach feedback (flush draws, straight draws)
+- Smarter opponent AI (folds weak hands, occasionally raises)
 - Multi-hand sessions with persistent chip counts
 - Mobile-responsive layout
 - Optional AI-powered deeper explanations
