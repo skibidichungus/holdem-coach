@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/*
+ * ─── Custom Properties ──────────────────────────────────────
+ * Define the poker-table palette as CSS variables so Tailwind
+ * utilities and arbitrary values can reference them anywhere.
+ */
+:root {
+  /* Dark green felt — the main table background */
+  --felt-green: #1a5c2e;
+  /* Slightly lighter green for subtle contrast (card area, borders) */
+  --felt-green-light: #237a3b;
+  /* Very dark green for the page / outer trim */
+  --felt-green-dark: #0f3d1d;
+  /* Warm gold accent for highlights and chips */
+  --gold-accent: #d4a843;
+  /* Card-back pattern color */
+  --card-back: #1e3a5f;
+  --card-back-accent: #2c5282;
+}
+
+/*
+ * ─── Base Styles ────────────────────────────────────────────
+ * Apply the dark felt background and smooth text rendering globally.
+ */
+body {
+  background-color: var(--felt-green-dark);
+  color: #f0f0f0;
+  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * ─── Card Flip Animation ────────────────────────────────────
+ * Used by CardView to animate cards being revealed at showdown.
+ */
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-card-in {
+  animation: cardSlideIn 0.35s ease-out both;
+}
+
+/*
+ * ─── Glow Pulse ─────────────────────────────────────────────
+ * Subtle glowing pulse for the "Suggested" action badge.
+ */
+@keyframes glowPulse {
+  0%, 100% {
+    box-shadow: 0 0 8px 2px rgba(212, 168, 67, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 16px 4px rgba(212, 168, 67, 0.7);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+/*
+ * ─── Overlay Fade-In ────────────────────────────────────────
+ * Smooth entrance for the tutorial overlay.
+ */
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-overlay-in {
+  animation: overlayFadeIn 0.3s ease-out both;
+}
