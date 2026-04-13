@@ -24,6 +24,7 @@ import {
   getActionFeedback,
   getHandStrength,
   getDrawInfo,
+  getShowdownMessage,
 } from "../lib/tutorial";
 
 // ═══════════════════════════════════════════════════════════════
@@ -79,6 +80,12 @@ interface PokerState {
   // ── Tutorial state ──
   /** Tutorial coaching state — messages, recommendations, and flow control. */
   tutorial: TutorialState;
+
+  // ── Showdown reveal ──
+  /** The human-readable label of the player's best hand (set at showdown). */
+  playerHandLabel: string | null;
+  /** The human-readable label of the opponent's best hand (set at showdown). */
+  opponentHandLabel: string | null;
 
   // ── Actions ──
   /** Shuffle the deck, deal cards, and start a new hand. */
@@ -171,6 +178,9 @@ export const usePokerStore = create<PokerState>((set, get) => ({
   winner: null,
   actionHistory: [],
   tutorial: createDefaultTutorial(),
+  // Reset hand labels so they don't bleed from the previous hand.
+  playerHandLabel: null,
+  opponentHandLabel: null,
 
   // ═════════════════════════════════════════════════════════════
   //  ACTION: INITIALIZE GAME
@@ -243,6 +253,9 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       phase: "preflop",
       winner: null,
       actionHistory: [],
+      // Clear showdown labels from the previous hand.
+      playerHandLabel: null,
+      opponentHandLabel: null,
       tutorial: {
         step: 0,
         message: preflopMessage,
@@ -611,12 +624,12 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       result = "tie";
     }
 
-    // Generate the showdown tutorial message.
-    // This announces what hand the player ended up with.
-    const showdownMessage: string = getPhaseMessage(
-      "showdown",
-      playerHand,
-      community
+    // Use the rich comparison message instead of the generic showdown message.
+    // This names both hands and explains why one beats the other.
+    const showdownMessage: string = getShowdownMessage(
+      playerEval,
+      opponentEval,
+      result
     );
 
     // Compute final hand strength for display at showdown.
@@ -625,6 +638,9 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     set({
       phase: "showdown",
       winner: result,
+      // Store both hand labels so the UI can display them near the cards.
+      playerHandLabel: playerEval.label,
+      opponentHandLabel: opponentEval.label,
       tutorial: {
         ...state.tutorial,
         step: state.tutorial.step + 1,

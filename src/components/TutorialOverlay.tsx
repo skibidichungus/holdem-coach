@@ -50,7 +50,7 @@ export default function TutorialOverlay({
       >
         {/* Coach icon and label */}
         <div className="flex items-center justify-center gap-2">
-          <span className="text-2xl">🎓</span>
+          <span className="text-2xl font-bold text-emerald-300">C</span>
           <span className="text-sm font-semibold uppercase tracking-wider text-emerald-300">
             Coach Says...
           </span>

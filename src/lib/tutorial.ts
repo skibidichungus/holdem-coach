@@ -747,3 +747,95 @@ export function getDrawInfo(
   // No notable draw detected.
   return null;
 }
+
+// ═════════════════════════════════════════════════════════════
+//  EXPORTED: SHOWDOWN COMPARISON MESSAGE
+// ═════════════════════════════════════════════════════════════
+
+// One-liner hierarchy hints shown when the hand ranks are close (within 3).
+// Keyed by [winnerRank]-[loserRank] to keep lookups fast and readable.
+// Only populated for adjacent/near pairs beginners might find confusing.
+const HIERARCHY_HINTS: Record<string, string> = {
+  // Pairs of adjacent ranks — most likely to confuse a beginner.
+  "3-2": "Two pair always beats one pair.",
+  "4-3": "Three of a kind beats two pair.",
+  "5-4": "A straight beats three of a kind.",
+  "6-5": "A flush beats a straight.",
+  "7-6": "A full house beats a flush.",
+  "8-7": "Four of a kind beats a full house.",
+  "9-8": "A straight flush beats four of a kind.",
+  // One rank apart from a fuller gap — still worth explaining.
+  "5-3": "A straight beats two pair.",
+  "6-4": "A flush beats three of a kind.",
+  "7-5": "A full house beats a straight.",
+  "8-6": "Four of a kind beats a flush.",
+};
+
+/**
+ * Generates a detailed 2–3 sentence showdown recap that names both hands,
+ * explains the outcome, and (when ranks are close) adds a brief hierarchy
+ * or kicker explanation for the beginner.
+ *
+ * @param playerEval   - The player's evaluated best hand.
+ * @param opponentEval - The opponent's evaluated best hand.
+ * @param winner       - Who won: "player", "opponent", or "tie".
+ * @returns A casual, encouraging showdown summary string.
+ *
+ * @example
+ * getShowdownMessage(playerEval, opponentEval, "player")
+ * // → "You had a Pair of Kings. Your opponent had a Pair of Nines.
+ * //    Your Kings beat their Nines — well played!"
+ */
+export function getShowdownMessage(
+  playerEval: { rank: HandRank; label: string },
+  opponentEval: { rank: HandRank; label: string },
+  winner: "player" | "opponent" | "tie"
+): string {
+  // Part 1: name both hands side by side.
+  const handIntro: string =
+    `You had ${playerEval.label}. Your opponent had ${opponentEval.label}.`;
+
+  // Part 2: outcome sentence.
+  let outcome: string;
+
+  if (winner === "tie") {
+    // Special case: both labels are the same hand type (e.g. both Pair of Aces).
+    outcome = `You both had the same hand — it's a split pot!`;
+  } else if (winner === "player") {
+    outcome = `Your ${playerEval.label} beats their ${opponentEval.label} — nice hand!`;
+  } else {
+    outcome = `Their ${opponentEval.label} beats your ${playerEval.label} — tough luck, happens to everyone.`;
+  }
+
+  // Part 3 (optional): a short hierarchy or kicker explanation.
+  // Only shown when the hand ranks are within 3 of each other — if the gap
+  // is large, the result is obvious and the extra sentence would be noise.
+  let hint: string = "";
+
+  if (winner !== "tie") {
+    const winnerRank: number =
+      winner === "player" ? playerEval.rank : opponentEval.rank;
+    const loserRank: number =
+      winner === "player" ? opponentEval.rank : playerEval.rank;
+    const rankGap: number = Math.abs(winnerRank - loserRank);
+
+    if (rankGap === 0) {
+      // Same hand category but different winner — this is a kicker situation.
+      // e.g. Both have One Pair, but player's kicker card is higher.
+      hint = `Both hands are the same type, but the higher cards (kickers) decided the winner.`;
+    } else if (rankGap <= 3) {
+      // Look up a pre-written hint for this rank matchup.
+      const hintKey: string = `${winnerRank}-${loserRank}`;
+      const hierarchyLine: string | undefined = HIERARCHY_HINTS[hintKey];
+      if (hierarchyLine) {
+        hint = hierarchyLine;
+      }
+    }
+    // If rankGap > 3, the result speaks for itself — no hint needed.
+  }
+
+  // Combine the parts, including the hint only if one was found.
+  return hint
+    ? `${handIntro} ${outcome} ${hint}`
+    : `${handIntro} ${outcome}`;
+}

@@ -61,8 +61,8 @@ export default function CoachPanel({
     >
       {/* ── Coach label ── */}
       <div className="flex items-center gap-2">
-        {/* Graduation cap emoji as a lightweight "coach" icon */}
-        <span className="text-lg">🎓</span>
+        {/* Coach icon */}
+        <span className="text-lg font-bold text-emerald-300">C</span>
         <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
           Coach
         </span>
@@ -115,8 +115,8 @@ export default function CoachPanel({
             px-3 py-2.5
           "
         >
-          {/* Lightning bolt icon to signal "opportunity ahead" */}
-          <span className="text-amber-400 text-sm mt-0.5">⚡</span>
+          {/* Draw alert icon */}
+          <span className="text-amber-400 text-sm font-bold mt-0.5">!</span>
           <p className="text-xs leading-relaxed text-amber-200">
             {drawMessage}
           </p>

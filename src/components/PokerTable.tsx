@@ -43,6 +43,9 @@ export default function PokerTable(): JSX.Element {
   const tutorial = usePokerStore((state) => state.tutorial);
   const continueTutorial = usePokerStore((state) => state.continueTutorial);
   const resetGame = usePokerStore((state) => state.resetGame);
+  // Hand labels are populated at showdown so the player can see both hands.
+  const playerHandLabel: string | null = usePokerStore((state) => state.playerHandLabel);
+  const opponentHandLabel: string | null = usePokerStore((state) => state.opponentHandLabel);
 
   // Should the opponent's cards be visible?
   // Only at showdown (so the player can see what they were up against).
@@ -104,6 +107,11 @@ export default function PokerTable(): JSX.Element {
               </>
             )}
           </div>
+
+          {/* Opponent's hand label badge — only visible at showdown */}
+          {showOpponentCards && opponentHandLabel !== null && (
+            <HandLabelBadge label={opponentHandLabel} side="opponent" />
+          )}
         </div>
 
         {/* ────────────────────────────────────────────────────
@@ -161,6 +169,11 @@ export default function PokerTable(): JSX.Element {
             {player.name} — {player.chips} chips
           </span>
 
+          {/* Player's hand label badge — only visible at showdown */}
+          {phase === "showdown" && playerHandLabel !== null && (
+            <HandLabelBadge label={playerHandLabel} side="player" />
+          )}
+
           {/* ── Action buttons or result display ── */}
           {winner !== null ? (
             // Hand is over — show result and a "Play Again" button.
@@ -191,6 +204,49 @@ export default function PokerTable(): JSX.Element {
           drawMessage={tutorial.drawMessage}
         />
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SUB-COMPONENT: HAND LABEL BADGE
+// ═══════════════════════════════════════════════════════════════
+
+interface HandLabelBadgeProps {
+  /** The evaluated hand label, e.g. "Pair of Kings" or "Ace-high Flush". */
+  label: string;
+  /** Which side this badge belongs to — affects the accent colour. */
+  side: "player" | "opponent";
+}
+
+/**
+ * A small pill badge that shows a hand's name at showdown.
+ * Appears just below the cards for both the player and the opponent.
+ * Uses emerald for the player and slate for the opponent to make
+ * it easy to tell whose hand is whose at a glance.
+ */
+function HandLabelBadge({ label, side }: HandLabelBadgeProps): JSX.Element {
+  // Player gets a bright emerald badge; opponent gets a neutral slate one.
+  const colorClass: string =
+    side === "player"
+      ? "bg-emerald-600/80 border-emerald-500/40 text-emerald-100"
+      : "bg-slate-600/80 border-slate-500/40 text-slate-200";
+
+  return (
+    <div
+      className={`
+        inline-flex items-center gap-1.5
+        px-3 py-1
+        rounded-full
+        border
+        text-xs font-semibold
+        animate-card-in
+        ${colorClass}
+      `}
+    >
+      {/* Small icon as a visual anchor */}
+      <span className="font-bold">*</span>
+      <span>{label}</span>
     </div>
   );
 }
@@ -235,19 +291,19 @@ function ResultBanner({
   winner,
   onPlayAgain,
 }: ResultBannerProps): JSX.Element {
-  // Build the result text and pick an emoji.
+  // Build the result text and pick a symbol.
   let resultText: string;
-  let emoji: string;
+  let symbol: string;
 
   if (winner === "player") {
     resultText = "You win!";
-    emoji = "🏆";
+    symbol = "W";
   } else if (winner === "opponent") {
     resultText = "Opponent wins";
-    emoji = "😔";
+    symbol = "L";
   } else {
     resultText = "It's a tie!";
-    emoji = "🤝";
+    symbol = "T";
   }
 
   return (
@@ -261,7 +317,7 @@ function ResultBanner({
           px-6 py-2
         "
       >
-        <span className="text-2xl">{emoji}</span>
+        <span className="text-2xl font-bold">{symbol}</span>
         <span
           className="text-lg font-bold"
           style={{ color: "var(--gold-accent)" }}
