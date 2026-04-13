@@ -22,6 +22,8 @@ import {
   getPhaseMessage,
   getRecommendedAction,
   getActionFeedback,
+  getHandStrength,
+  getDrawInfo,
 } from "../lib/tutorial";
 
 // ═══════════════════════════════════════════════════════════════
@@ -132,6 +134,9 @@ function createDefaultTutorial(): TutorialState {
     message: "",
     recommendedAction: null,
     awaitingContinue: false,
+    // Default to "Nothing Yet" until the first hand is dealt.
+    handStrength: { level: "Nothing Yet", percentage: 0 },
+    drawMessage: null,
   };
 }
 
@@ -210,10 +215,14 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       []
     );
 
-    // Step 7: Determine the current mode to decide if we pause.
+    // Step 7: Compute hand strength for the preflop display bar.
+    // No community cards yet, so pass an empty array.
+    const preflopStrength = getHandStrength("preflop", playerHand, []);
+
+    // Step 8: Determine the current mode to decide if we pause.
     const currentMode: GameMode = get().mode;
 
-    // Step 8: Apply all state changes in a single update.
+    // Step 9: Apply all state changes in a single update.
     set({
       deck: remainingDeck,
       communityCards: [],
@@ -240,6 +249,9 @@ export const usePokerStore = create<PokerState>((set, get) => ({
         recommendedAction: preflopRecommendation,
         // In guided mode, pause so the player can read the tutorial message.
         awaitingContinue: currentMode === "guided",
+        handStrength: preflopStrength,
+        // No draws are possible preflop.
+        drawMessage: null,
       },
     });
   },
@@ -536,6 +548,12 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       newCommunityCards
     );
 
+    // Compute the updated hand strength for the strength bar.
+    const handStrength = getHandStrength(nextPhase, playerHand, newCommunityCards);
+
+    // Detect any draws (only relevant on flop and turn).
+    const drawMessage: string | null = getDrawInfo(playerHand, newCommunityCards);
+
     set({
       // Move to the next phase.
       phase: nextPhase,
@@ -552,6 +570,8 @@ export const usePokerStore = create<PokerState>((set, get) => ({
         // In guided mode, pause so the player can read the tutorial message
         // before they need to act. In quick mode, let them act immediately.
         awaitingContinue: currentMode === "guided",
+        handStrength,
+        drawMessage,
       },
     });
   },
@@ -599,6 +619,9 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       community
     );
 
+    // Compute final hand strength for display at showdown.
+    const showdownStrength = getHandStrength("showdown", playerHand, community);
+
     set({
       phase: "showdown",
       winner: result,
@@ -608,6 +631,8 @@ export const usePokerStore = create<PokerState>((set, get) => ({
         message: showdownMessage,
         recommendedAction: null, // No actions at showdown — the hand is over.
         awaitingContinue: false,
+        handStrength: showdownStrength,
+        drawMessage: null, // No draws at showdown — all cards are revealed.
       },
     });
   },

@@ -1,4 +1,4 @@
-import type { Card, GamePhase, PlayerAction, Rank } from "./types";
+import type { Card, GamePhase, PlayerAction, Rank, HandStrength } from "./types";
 import { HandRank } from "./types";
 import { evaluateHand } from "./handEvaluator";
 
@@ -541,4 +541,209 @@ function getDeviationFeedback(
 
   // Fallback — should rarely be reached given the exhaustive cases above.
   return "Interesting choice — every decision is a learning opportunity!";
+}
+
+// ═════════════════════════════════════════════════════════════
+//  EXPORTED: HAND STRENGTH
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Returns a rough hand strength level and percentage for the player's current hand.
+ *
+ * - Preflop: based on starting hand classification (strong/decent/weak).
+ * - Post-flop: based on the HandRank returned by evaluateHand.
+ *
+ * The percentage is a rough 0–100 value intended to fill a visual bar,
+ * not a mathematically precise equity calculation.
+ *
+ * @param phase          - The current game phase.
+ * @param holeCards      - The player's two private hole cards.
+ * @param communityCards - The community cards on the board (empty pre-flop).
+ * @returns A HandStrength with a human-readable level and a 0–100 percentage.
+ *
+ * @example
+ * getHandStrength("flop", holeCards, communityCards)
+ * // → { level: "Decent", percentage: 35 }
+ */
+export function getHandStrength(
+  phase: GamePhase,
+  holeCards: Card[],
+  communityCards: Card[]
+): HandStrength {
+  // ── Preflop: no community cards yet — use starting hand classification ──
+  if (phase === "preflop" || communityCards.length === 0) {
+    const strength: "strong" | "decent" | "weak" =
+      classifyStartingHand(holeCards);
+
+    if (strength === "strong") {
+      // Premium hands like AA, KK, AK — well above average.
+      return { level: "Strong", percentage: 70 };
+    }
+    if (strength === "decent") {
+      // Suited connectors, medium pairs, etc. — playable.
+      return { level: "Decent", percentage: 40 };
+    }
+    // Low offsuit junk — little equity preflop.
+    return { level: "Weak", percentage: 15 };
+  }
+
+  // ── Post-flop: evaluate the actual best made hand ──
+  const evaluated = evaluateHand(holeCards, communityCards);
+  const rank: HandRank = evaluated.rank;
+
+  // Map each HandRank to a level and a representative percentage.
+  // Percentages are intentionally round/simple — this is a teaching tool.
+  if (rank === HandRank.HighCard) {
+    // No pair, no draw — barely ahead of nothing.
+    return { level: "Weak", percentage: 15 };
+  }
+  if (rank === HandRank.OnePair) {
+    // One pair is decent — often enough to win a small pot.
+    // The exact percentage varies with pair rank, but 35% is a good average.
+    return { level: "Decent", percentage: 35 };
+  }
+  if (rank === HandRank.TwoPair) {
+    // Two pair is a solid made hand.
+    return { level: "Strong", percentage: 55 };
+  }
+  if (rank === HandRank.ThreeOfAKind) {
+    // Trips is very strong; very few outs for opponents.
+    return { level: "Strong", percentage: 70 };
+  }
+  if (rank === HandRank.Straight || rank === HandRank.Flush) {
+    // Straights and flushes are near the top of the range.
+    return { level: "Monster", percentage: 80 };
+  }
+  if (rank === HandRank.FullHouse) {
+    // Full house is almost unbeatable short of quads or better.
+    return { level: "Nuts", percentage: 90 };
+  }
+  if (rank === HandRank.FourOfAKind) {
+    // Four of a kind — only a straight/royal flush beats this.
+    return { level: "Nuts", percentage: 96 };
+  }
+  if (rank === HandRank.StraightFlush || rank === HandRank.RoyalFlush) {
+    // The absolute best hands in poker.
+    return { level: "Nuts", percentage: 100 };
+  }
+
+  // Fallback for any unlisted rank — should never be reached.
+  return { level: "Nothing Yet", percentage: 0 };
+}
+
+// ═════════════════════════════════════════════════════════════
+//  EXPORTED: DRAW DETECTION
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Detects common drawing situations on the flop or turn and returns
+ * a short, encouraging message for the player, or null if no notable
+ * draw exists.
+ *
+ * Priority (highest first):
+ *   1. Flush draw (4 cards of the same suit)
+ *   2. Open-ended straight draw (4 consecutive ranks)
+ *   3. Gutshot straight draw (4 of 5 consecutive ranks, one gap)
+ *   4. Overcards (both hole cards outrank every community card)
+ *
+ * Only meaningful on the flop and turn — returns null otherwise.
+ *
+ * @param holeCards      - The player's two private hole cards.
+ * @param communityCards - The community cards currently on the board.
+ * @returns A short draw message, or null if no draw is detected.
+ *
+ * @example
+ * getDrawInfo(holeCards, [flopCard1, flopCard2, flopCard3])
+ * // → "You're one card away from a flush!"
+ */
+export function getDrawInfo(
+  holeCards: Card[],
+  communityCards: Card[]
+): string | null {
+  // Only check for draws when there are 3–4 community cards (flop or turn).
+  // Preflop has no community cards; river/showdown have all 5 (no cards left to hit).
+  if (communityCards.length < 3 || communityCards.length > 4) {
+    return null;
+  }
+
+  // Combine hole cards and community cards into one pool for analysis.
+  const allCards: Card[] = [...holeCards, ...communityCards];
+
+  // ── 1. FLUSH DRAW: 4 cards of the same suit ──
+  // Count how many cards share each suit.
+  const suitCounts: Record<string, number> = {};
+  for (const card of allCards) {
+    suitCounts[card.suit] = (suitCounts[card.suit] ?? 0) + 1;
+  }
+  // If any suit has exactly 4 cards, the player has a flush draw.
+  const hasFlushDraw: boolean = Object.values(suitCounts).some(
+    (count: number) => count === 4
+  );
+  if (hasFlushDraw) {
+    return "You're one card away from a flush!";
+  }
+
+  // ── 2. STRAIGHT DRAWS: check sorted unique ranks for consecutive sequences ──
+
+  // Collect unique ranks and sort them ascending.
+  // We also add rank 1 if an Ace is present (Ace can play low in A-2-3-4-5).
+  const rawRanks: number[] = allCards.map((c: Card) => c.rank);
+  const uniqueRanks: number[] = [...new Set(rawRanks)].sort(
+    (a: number, b: number) => a - b
+  );
+
+  // If there's an Ace (rank 14), also treat it as a 1 for wheel straights.
+  if (uniqueRanks.includes(14)) {
+    uniqueRanks.unshift(1);
+  }
+
+  // Helper: given a sorted list of unique ranks, count the longest unbroken
+  // run of consecutively incremented values (e.g. [4,5,6,7] → 4).
+  // Also detects gutshots — a run of 4 with exactly one gap.
+  let longestRun: number = 1; // at minimum a single card
+  let currentRun: number = 1;
+  let hasGutshot: boolean = false;
+
+  for (let i: number = 1; i < uniqueRanks.length; i++) {
+    const gap: number = uniqueRanks[i] - uniqueRanks[i - 1];
+    if (gap === 1) {
+      // Consecutive — extend the current run.
+      currentRun++;
+      longestRun = Math.max(longestRun, currentRun);
+    } else if (gap === 2 && currentRun >= 3) {
+      // One-card gap inside a run of at least 3 — this is a gutshot.
+      // (e.g. 5-6-8 has a gap at 7; if we also have 9 that's 5-6-?-8-9)
+      hasGutshot = true;
+      currentRun++; // the gutshot card counts toward the 4-card window
+      longestRun = Math.max(longestRun, currentRun);
+    } else {
+      // Gap too large — reset the run.
+      currentRun = 1;
+    }
+  }
+
+  // Open-ended straight draw: 4 consecutive ranks (can be completed at either end).
+  if (longestRun >= 4 && !hasGutshot) {
+    return "You have an open-ended straight draw — two cards could complete it.";
+  }
+
+  // Gutshot straight draw: 4 of 5 sequential ranks with one gap in the middle.
+  if (hasGutshot || longestRun >= 4) {
+    return "You have a gutshot straight draw — one specific card completes your straight.";
+  }
+
+  // ── 3. OVERCARDS: both hole cards outrank every community card ──
+  // This means the player could improve significantly by pairing either hole card.
+  const maxCommunityRank: number = Math.max(
+    ...communityCards.map((c: Card) => c.rank)
+  );
+  const bothOvercards: boolean =
+    holeCards.every((c: Card) => c.rank > maxCommunityRank);
+
+  if (bothOvercards) {
+    return "Both your cards are higher than the board — you could pair up.";
+  }
+
+  // No notable draw detected.
+  return null;
 }

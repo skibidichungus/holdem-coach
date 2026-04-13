@@ -1,26 +1,50 @@
 "use client";
 
+import type { HandStrength } from "../lib/types";
+
 // ─── Props ──────────────────────────────────────────────────
 interface CoachPanelProps {
   /** The tutorial message to display to the player. */
   message: string;
+  /** Current hand strength — drives the visual meter. */
+  handStrength: HandStrength;
+  /** Draw detection message (flush draw, OESD, etc.), or null if none. */
+  drawMessage: string | null;
 }
+
+// ─── Strength Bar Config ─────────────────────────────────────
+// Map each level to a Tailwind background color class for the fill bar.
+// Colors range visually from red (weak) through yellow to green (nuts).
+const LEVEL_BAR_COLOR: Record<HandStrength["level"], string> = {
+  "Nothing Yet": "bg-gray-500",
+  Weak: "bg-red-500",
+  Decent: "bg-yellow-400",
+  Strong: "bg-emerald-400",
+  Monster: "bg-emerald-500",
+  Nuts: "bg-green-400",
+};
 
 // ─── Component ──────────────────────────────────────────────
 /**
- * A persistent panel that displays the tutorial coach's message.
+ * A persistent panel that displays the tutorial coach's message,
+ * a hand strength meter, and (when present) a draw detection callout.
  *
  * Styled as a speech-bubble / coach card — always visible so the
  * player can reference the guidance at any time. Sits below the
- * main table area or alongside it on wide screens.
+ * main table area.
  */
 export default function CoachPanel({
   message,
+  handStrength,
+  drawMessage,
 }: CoachPanelProps): JSX.Element {
-  // Don't render anything if there's no message yet.
+  // Don't render anything until the first hand is dealt.
   if (!message) {
     return <></>;
   }
+
+  // Pick the bar fill color for the current strength level.
+  const barColor: string = LEVEL_BAR_COLOR[handStrength.level];
 
   return (
     <div
@@ -32,11 +56,12 @@ export default function CoachPanel({
         px-5 py-4
         max-w-xl
         shadow-lg
+        space-y-4
       "
     >
       {/* ── Coach label ── */}
-      <div className="flex items-center gap-2 mb-2">
-        {/* Small icon — a graduation cap emoji as a lightweight "coach" icon */}
+      <div className="flex items-center gap-2">
+        {/* Graduation cap emoji as a lightweight "coach" icon */}
         <span className="text-lg">🎓</span>
         <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
           Coach
@@ -47,6 +72,56 @@ export default function CoachPanel({
       <p className="text-sm leading-relaxed text-emerald-50">
         {message}
       </p>
+
+      {/* ── Hand Strength Meter ── */}
+      {/*
+        Renders a horizontal bar that fills left-to-right based on the
+        percentage value, changing colour from red (weak) to green (strong).
+      */}
+      <div className="space-y-1.5">
+        {/* Label row: "Hand Strength" on the left, level name on the right */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">
+            Hand Strength
+          </span>
+          <span className="text-xs font-semibold text-white">
+            {handStrength.level}
+          </span>
+        </div>
+
+        {/* Track: full-width gray background */}
+        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+          {/* Fill: animated width transition so the bar grows smoothly */}
+          <div
+            className={`h-full rounded-full transition-all duration-500 ease-out ${barColor}`}
+            style={{ width: `${handStrength.percentage}%` }}
+          />
+        </div>
+      </div>
+
+      {/* ── Draw Detection Callout ── */}
+      {/*
+        Only rendered when a draw is detected (flush draw, straight draw, etc.).
+        Uses a slightly different visual style to distinguish it from the
+        main coach message.
+      */}
+      {drawMessage !== null && (
+        <div
+          className="
+            flex items-start gap-2
+            bg-amber-900/40
+            border border-amber-600/30
+            rounded-lg
+            px-3 py-2.5
+          "
+        >
+          {/* Lightning bolt icon to signal "opportunity ahead" */}
+          <span className="text-amber-400 text-sm mt-0.5">⚡</span>
+          <p className="text-xs leading-relaxed text-amber-200">
+            {drawMessage}
+          </p>
+        </div>
+      )}
 
       {/* ── Speech-bubble tail (decorative) ── */}
       {/* A small CSS triangle pointing upward, connecting the panel to the table */}

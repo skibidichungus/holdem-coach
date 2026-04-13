@@ -63,10 +63,19 @@ export type GameMode = "guided" | "quick";
 
 // ─── Tutorial ────────────────────────────────────────────────
 
+// A rough 0–100 hand strength estimate with a human-readable tier label.
+// Used by the hand strength indicator bar in the CoachPanel.
+export interface HandStrength {
+  level: "Nothing Yet" | "Weak" | "Decent" | "Strong" | "Monster" | "Nuts";
+  percentage: number; // 0–100 — fills the strength bar in the UI
+}
+
 // Tracks where the learner is inside the guided tutorial flow.
 export interface TutorialState {
   step: number; // Current step index (starts at 0)
   message: string; // Instructional text shown to the player
   recommendedAction: PlayerAction | null; // Suggested action, or null if no suggestion
   awaitingContinue: boolean; // True when the UI is waiting for the player to click "Continue"
+  handStrength: HandStrength; // Current hand strength level and percentage
+  drawMessage: string | null; // Draw detection message (flush/straight draw, etc.) or null
 }

@@ -185,7 +185,11 @@ export default function PokerTable(): JSX.Element {
       {/* ── COACH PANEL (below the table) ── */}
       {/* Always visible so the player can re-read guidance at any time. */}
       {!tutorial.awaitingContinue && (
-        <CoachPanel message={tutorial.message} />
+        <CoachPanel
+          message={tutorial.message}
+          handStrength={tutorial.handStrength}
+          drawMessage={tutorial.drawMessage}
+        />
       )}
     </div>
   );
