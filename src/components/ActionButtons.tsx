@@ -3,7 +3,6 @@
 import { usePokerStore } from "../store/usePokerStore";
 import type { PlayerAction } from "../lib/types";
 
-// ─── Component ──────────────────────────────────────────────
 /**
  * Three action buttons: Fold, Call, and Raise.
  *
@@ -14,7 +13,7 @@ import type { PlayerAction } from "../lib/types";
  * - Raise uses a fixed amount: double the current bet. This keeps things
  *   simple for beginners (no manual bet-sizing).
  */
-export default function ActionButtons(): JSX.Element {
+export default function ActionButtons() {
   // ── Pull state and actions from the store ──
   const phase = usePokerStore((state) => state.phase);
   const currentBet: number = usePokerStore((state) => state.currentBet);
@@ -106,7 +105,7 @@ function ActionButton({
   disabled,
   recommended,
   variant,
-}: ActionButtonProps): JSX.Element {
+}: ActionButtonProps) {
   // Choose base colours based on the variant.
   const variantClasses: Record<string, string> = {
     danger:

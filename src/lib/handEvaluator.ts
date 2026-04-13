@@ -1,45 +1,6 @@
 import type { Card, Rank, EvaluatedHand } from "./types";
 import { HandRank } from "./types";
-
-// ═══════════════════════════════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════════════════════════════
-
-// Maps a numeric rank to its singular human-readable name.
-// Used for labels like "Ace-high Flush" or "King-high Straight".
-const RANK_NAMES: Record<number, string> = {
-  2: "Two",
-  3: "Three",
-  4: "Four",
-  5: "Five",
-  6: "Six",
-  7: "Seven",
-  8: "Eight",
-  9: "Nine",
-  10: "Ten",
-  11: "Jack",
-  12: "Queen",
-  13: "King",
-  14: "Ace",
-};
-
-// Maps a numeric rank to its plural human-readable name.
-// Used for labels like "Pair of Kings" or "Three Jacks".
-const RANK_NAMES_PLURAL: Record<number, string> = {
-  2: "Twos",
-  3: "Threes",
-  4: "Fours",
-  5: "Fives",
-  6: "Sixes",
-  7: "Sevens",
-  8: "Eights",
-  9: "Nines",
-  10: "Tens",
-  11: "Jacks",
-  12: "Queens",
-  13: "Kings",
-  14: "Aces",
-};
+import { RANK_NAMES, RANK_NAMES_PLURAL } from "./constants";
 
 // ── Scoring base ────────────────────────────────────────────
 //
@@ -53,6 +14,20 @@ const RANK_NAMES_PLURAL: Record<number, string> = {
 // Using 15 guarantees that no combination of lower-order kickers
 // can "overflow" into the next higher-order slot.
 const KICKER_BASE: number = 15;
+
+/**
+ * Precomputed powers of KICKER_BASE for exponents 0–5.
+ * Avoids calling Math.pow in the hot scoring path.
+ *
+ * KICKER_POWERS[5] = 15⁵ = 759375  (used for hand rank)
+ * KICKER_POWERS[4] = 15⁴ = 50625   (used for first kicker)
+ * …down to…
+ * KICKER_POWERS[0] = 15⁰ = 1       (used for fifth kicker)
+ */
+const KICKER_POWERS: number[] = Array.from(
+  { length: 6 },
+  (_, i: number) => Math.pow(KICKER_BASE, i)
+);
 
 // ═══════════════════════════════════════════════════════════════
 //  HELPER: NAMING
@@ -96,14 +71,10 @@ function rankNamePlural(rank: Rank): string {
  * computeScore(HandRank.OnePair, [13, 14, 9, 4])
  */
 function computeScore(handRank: HandRank, kickers: number[]): number {
-  // The hand rank is the most significant factor.
-  // Multiplying by BASE⁵ pushes it above all possible kicker values.
-  let score: number = handRank * Math.pow(KICKER_BASE, 5);
+  let score: number = handRank * KICKER_POWERS[5];
 
-  // Each kicker occupies a successively lower power of BASE.
-  // kickers[0] gets BASE⁴, kickers[1] gets BASE³, and so on.
   for (let i: number = 0; i < kickers.length; i++) {
-    score += kickers[i] * Math.pow(KICKER_BASE, 4 - i);
+    score += kickers[i] * KICKER_POWERS[4 - i];
   }
 
   return score;
@@ -156,11 +127,10 @@ function getCombinations(cards: Card[], size: number): Card[][] {
       return;
     }
 
-    // Try each card from startIndex onward as the next pick.
     for (let i: number = startIndex; i < cards.length; i++) {
-      current.push(cards[i]); // ← choose this card
-      backtrack(i + 1, current); // ← recurse, moving past this card
-      current.pop(); // ← un-choose (backtrack) so we can try the next card
+      current.push(cards[i]);
+      backtrack(i + 1, current);
+      current.pop();
     }
   }
 
@@ -190,7 +160,6 @@ function getRankCounts(cards: Card[]): Map<Rank, number> {
   const counts: Map<Rank, number> = new Map();
 
   for (const card of cards) {
-    // If this rank hasn't been seen yet, default to 0, then add 1.
     const currentCount: number = counts.get(card.rank) ?? 0;
     counts.set(card.rank, currentCount + 1);
   }
@@ -209,12 +178,11 @@ function getRankCounts(cards: Card[]): Map<Rank, number> {
  * @returns `true` if every card has the same suit, `false` otherwise.
  */
 function isFlush(cards: Card[]): boolean {
-  // Use the first card's suit as the reference.
   const targetSuit = cards[0].suit;
 
   for (const card of cards) {
     if (card.suit !== targetSuit) {
-      return false; // At least one card has a different suit — not a flush.
+      return false;
     }
   }
 

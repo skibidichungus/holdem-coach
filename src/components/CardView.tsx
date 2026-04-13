@@ -2,7 +2,6 @@
 
 import type { Card, Rank, Suit } from "../lib/types";
 
-// ─── Props ──────────────────────────────────────────────────
 interface CardViewProps {
   /** The card data to render (suit + rank). */
   card: Card;
@@ -10,9 +9,7 @@ interface CardViewProps {
   faceDown?: boolean;
 }
 
-// ─── Rank Display Map ───────────────────────────────────────
 // Maps the numeric rank values to the symbols shown on a playing card.
-// Face cards get their letter abbreviations; Ace is "A".
 const RANK_DISPLAY: Record<Rank, string> = {
   2: "2",
   3: "3",
@@ -29,7 +26,6 @@ const RANK_DISPLAY: Record<Rank, string> = {
   14: "A",
 };
 
-// ─── Suit Display Map ───────────────────────────────────────
 // Maps suit names to their Unicode symbols.
 const SUIT_SYMBOL: Record<Suit, string> = {
   hearts: "♥",
@@ -38,7 +34,6 @@ const SUIT_SYMBOL: Record<Suit, string> = {
   spades: "♠",
 };
 
-// ─── Component ──────────────────────────────────────────────
 /**
  * Renders a single playing card.
  *
@@ -51,9 +46,8 @@ const SUIT_SYMBOL: Record<Suit, string> = {
 export default function CardView({
   card,
   faceDown = false,
-}: CardViewProps): JSX.Element {
+}: CardViewProps) {
   // ── Face-down card ──
-  // Show a patterned card back — no card info visible.
   if (faceDown) {
     return (
       <div
@@ -77,7 +71,6 @@ export default function CardView({
           className="absolute inset-3 rounded border opacity-20"
           style={{ borderColor: "var(--card-back-accent)" }}
         />
-        {/* Center emblem */}
         <span className="text-xl opacity-40 text-blue-200">♠</span>
       </div>
     );
@@ -85,11 +78,9 @@ export default function CardView({
 
   // ── Face-up card ──
 
-  // Determine if this is a red suit (hearts/diamonds) or black (clubs/spades).
   const isRed: boolean = card.suit === "hearts" || card.suit === "diamonds";
   const textColor: string = isRed ? "text-red-600" : "text-gray-900";
 
-  // Look up the display string for the rank and the suit symbol.
   const rankStr: string = RANK_DISPLAY[card.rank];
   const suitStr: string = SUIT_SYMBOL[card.suit];
 

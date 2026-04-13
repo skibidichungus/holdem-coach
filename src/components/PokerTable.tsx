@@ -3,7 +3,6 @@
 import { usePokerStore } from "../store/usePokerStore";
 import type { Card } from "../lib/types";
 
-// ── Child components ──
 import CardView from "./CardView";
 import ActionButtons from "./ActionButtons";
 import CoachPanel from "./CoachPanel";
@@ -32,7 +31,7 @@ import TutorialOverlay from "./TutorialOverlay";
  * When `tutorial.awaitingContinue` is true, a TutorialOverlay covers
  * the table. When there's a winner, a result banner replaces the buttons.
  */
-export default function PokerTable(): JSX.Element {
+export default function PokerTable()  {
   // ── Pull all needed state from the store ──
   const player = usePokerStore((state) => state.player);
   const opponent = usePokerStore((state) => state.opponent);
@@ -83,12 +82,10 @@ export default function PokerTable(): JSX.Element {
             SECTION 1: OPPONENT'S CARDS (top of the table)
         ──────────────────────────────────────────────────── */}
         <div className="relative z-10 flex flex-col items-center gap-2">
-          {/* Opponent label */}
           <span className="text-xs font-medium uppercase tracking-wider text-emerald-300/70">
             {opponent.name}
           </span>
 
-          {/* Opponent's two cards */}
           <div className="flex gap-2">
             {opponent.hand.length > 0 ? (
               opponent.hand.map((card: Card, index: number) => (
@@ -118,7 +115,7 @@ export default function PokerTable(): JSX.Element {
             SECTION 2: PHASE BANNER + COMMUNITY CARDS (center)
         ──────────────────────────────────────────────────── */}
         <div className="relative z-10 flex flex-col items-center gap-4 my-2">
-          {/* Phase + pot banner */}
+          {/* Phase banner + community cards */}
           <PhaseBanner phase={phase} pot={pot} />
 
           {/* Community cards — shown as they're dealt (3 on flop, +1 turn, +1 river) */}
@@ -146,7 +143,6 @@ export default function PokerTable(): JSX.Element {
             SECTION 3: PLAYER'S CARDS + ACTIONS (bottom)
         ──────────────────────────────────────────────────── */}
         <div className="relative z-10 flex flex-col items-center gap-4">
-          {/* Player's two hole cards — always face-up */}
           <div className="flex gap-2">
             {player.hand.length > 0 ? (
               player.hand.map((card: Card, index: number) => (
@@ -164,7 +160,6 @@ export default function PokerTable(): JSX.Element {
             )}
           </div>
 
-          {/* Player label */}
           <span className="text-xs font-medium uppercase tracking-wider text-emerald-300/70">
             {player.name} — {player.chips} chips
           </span>
@@ -225,7 +220,7 @@ interface HandLabelBadgeProps {
  * Uses emerald for the player and slate for the opponent to make
  * it easy to tell whose hand is whose at a glance.
  */
-function HandLabelBadge({ label, side }: HandLabelBadgeProps): JSX.Element {
+function HandLabelBadge({ label, side }: HandLabelBadgeProps)  {
   // Player gets a bright emerald badge; opponent gets a neutral slate one.
   const colorClass: string =
     side === "player"
@@ -244,7 +239,6 @@ function HandLabelBadge({ label, side }: HandLabelBadgeProps): JSX.Element {
         ${colorClass}
       `}
     >
-      {/* Small icon as a visual anchor */}
       <span className="font-bold">*</span>
       <span>{label}</span>
     </div>
@@ -259,7 +253,7 @@ function HandLabelBadge({ label, side }: HandLabelBadgeProps): JSX.Element {
  * An empty dotted-outline rectangle that marks where a card will appear.
  * Shown before cards are dealt to preserve layout spacing.
  */
-function CardPlaceholder(): JSX.Element {
+function CardPlaceholder()  {
   return (
     <div
       className="
@@ -290,7 +284,7 @@ interface ResultBannerProps {
 function ResultBanner({
   winner,
   onPlayAgain,
-}: ResultBannerProps): JSX.Element {
+}: ResultBannerProps)  {
   // Build the result text and pick a symbol.
   let resultText: string;
   let symbol: string;
@@ -308,7 +302,6 @@ function ResultBanner({
 
   return (
     <div className="flex flex-col items-center gap-3 animate-card-in">
-      {/* Result text */}
       <div
         className="
           flex items-center gap-2
@@ -326,7 +319,6 @@ function ResultBanner({
         </span>
       </div>
 
-      {/* Play Again button */}
       <button
         id="play-again-btn"
         onClick={onPlayAgain}

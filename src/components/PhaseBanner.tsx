@@ -2,7 +2,6 @@
 
 import type { GamePhase } from "../lib/types";
 
-// ─── Props ──────────────────────────────────────────────────
 interface PhaseBannerProps {
   /** The current game phase (preflop, flop, turn, river, showdown). */
   phase: GamePhase;
@@ -10,9 +9,7 @@ interface PhaseBannerProps {
   pot: number;
 }
 
-// ─── Phase Order ────────────────────────────────────────────
-// All five phases in the order they occur during a hand.
-// The index in this array determines "how far along" we are.
+// All five phases in order. The index determines "how far along" we are.
 const PHASES: GamePhase[] = ["preflop", "flop", "turn", "river", "showdown"];
 
 // Human-readable label for each phase, shown below each step dot.
@@ -24,7 +21,6 @@ const PHASE_LABELS: Record<GamePhase, string> = {
   showdown: "Showdown",
 };
 
-// ─── Component ──────────────────────────────────────────────
 /**
  * A horizontal phase stepper that shows all five stages of a Texas Hold'em
  * hand, with visual feedback for completed, current, and upcoming phases.
@@ -38,8 +34,7 @@ const PHASE_LABELS: Record<GamePhase, string> = {
 export default function PhaseBanner({
   phase,
   pot,
-}: PhaseBannerProps): JSX.Element {
-  // Find the index of the current phase so we can compare against it.
+}: PhaseBannerProps) {
   const currentIndex: number = PHASES.indexOf(phase);
 
   return (
@@ -80,7 +75,6 @@ export default function PhaseBanner({
                   )}
                 </div>
 
-                {/* Phase label below the dot */}
                 <span
                   className={`
                     text-[10px] font-medium whitespace-nowrap

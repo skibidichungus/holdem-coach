@@ -1,28 +1,7 @@
-import type { Card, GamePhase, PlayerAction, Rank, HandStrength } from "./types";
+import type { Card, GamePhase, PlayerAction, Rank, HandStrength, EvaluatedHand } from "./types";
 import { HandRank } from "./types";
 import { evaluateHand } from "./handEvaluator";
-
-// ═══════════════════════════════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════════════════════════════
-
-// Maps a numeric rank to its human-readable name.
-// Used throughout this file for building feedback messages.
-const RANK_NAMES: Record<number, string> = {
-  2: "Two",
-  3: "Three",
-  4: "Four",
-  5: "Five",
-  6: "Six",
-  7: "Seven",
-  8: "Eight",
-  9: "Nine",
-  10: "Ten",
-  11: "Jack",
-  12: "Queen",
-  13: "King",
-  14: "Ace",
-};
+import { RANK_NAMES } from "./constants";
 
 // Maps a HandRank enum value to a beginner-friendly label.
 // These are simpler than the handEvaluator labels — no kickers, just the category.
@@ -193,7 +172,8 @@ function friendlyHandLabel(handRank: HandRank): string {
 export function getPhaseMessage(
   phase: GamePhase,
   holeCards: Card[],
-  communityCards: Card[]
+  communityCards: Card[],
+  preComputed?: EvaluatedHand
 ): string {
   switch (phase) {
     // ── Preflop: explain hole cards and comment on starting strength ──
@@ -215,13 +195,10 @@ export function getPhaseMessage(
       return `You've been dealt your hole cards — these are private to you. You have ${card1Name}-${card2Name} ${description} — ${strengthComment}`;
     }
 
-    // ── Flop: three community cards appear, assess improvement ──
     case "flop": {
-      // Evaluate the player's best hand using hole cards + the 3 community cards.
-      const evaluated = evaluateHand(holeCards, communityCards);
+      const evaluated = preComputed ?? evaluateHand(holeCards, communityCards);
       const handLabel: string = friendlyHandLabel(evaluated.rank);
 
-      // Different messages depending on whether the flop helped.
       if (evaluated.rank >= HandRank.TwoPair) {
         // Strong hand — the flop connected well.
         return `The flop is down — 3 community cards everyone shares. Great news: you've made ${handLabel}! You're in a strong position.`;
@@ -236,7 +213,7 @@ export function getPhaseMessage(
 
     // ── Turn: one more community card, check for improvement ──
     case "turn": {
-      const evaluated = evaluateHand(holeCards, communityCards);
+      const evaluated = preComputed ?? evaluateHand(holeCards, communityCards);
       const handLabel: string = friendlyHandLabel(evaluated.rank);
 
       if (evaluated.rank >= HandRank.TwoPair) {
@@ -250,7 +227,7 @@ export function getPhaseMessage(
 
     // ── River: the final community card ──
     case "river": {
-      const evaluated = evaluateHand(holeCards, communityCards);
+      const evaluated = preComputed ?? evaluateHand(holeCards, communityCards);
       const handLabel: string = friendlyHandLabel(evaluated.rank);
 
       if (evaluated.rank >= HandRank.TwoPair) {
@@ -264,7 +241,7 @@ export function getPhaseMessage(
 
     // ── Showdown: reveal the final hand evaluation ──
     case "showdown": {
-      const evaluated = evaluateHand(holeCards, communityCards);
+      const evaluated = preComputed ?? evaluateHand(holeCards, communityCards);
 
       // Use the detailed label from the evaluator (e.g. "Pair of Kings")
       // rather than the generic category label.
@@ -302,7 +279,8 @@ export function getPhaseMessage(
 export function getRecommendedAction(
   phase: GamePhase,
   holeCards: Card[],
-  communityCards: Card[]
+  communityCards: Card[],
+  preComputed?: EvaluatedHand
 ): PlayerAction | null {
   // ── Preflop: base the recommendation on starting hand classification ──
   if (phase === "preflop") {
@@ -332,7 +310,7 @@ export function getRecommendedAction(
     return null;
   }
 
-  const evaluated = evaluateHand(holeCards, communityCards);
+  const evaluated = preComputed ?? evaluateHand(holeCards, communityCards);
 
   // Two pair or better → raise. You likely have a winning hand.
   if (evaluated.rank >= HandRank.TwoPair) {
@@ -568,7 +546,8 @@ function getDeviationFeedback(
 export function getHandStrength(
   phase: GamePhase,
   holeCards: Card[],
-  communityCards: Card[]
+  communityCards: Card[],
+  preComputed?: EvaluatedHand
 ): HandStrength {
   // ── Preflop: no community cards yet — use starting hand classification ──
   if (phase === "preflop" || communityCards.length === 0) {
@@ -588,7 +567,7 @@ export function getHandStrength(
   }
 
   // ── Post-flop: evaluate the actual best made hand ──
-  const evaluated = evaluateHand(holeCards, communityCards);
+  const evaluated = preComputed ?? evaluateHand(holeCards, communityCards);
   const rank: HandRank = evaluated.rank;
 
   // Map each HandRank to a level and a representative percentage.

@@ -22,7 +22,7 @@ interface TutorialOverlayProps {
 export default function TutorialOverlay({
   message,
   onContinue,
-}: TutorialOverlayProps): JSX.Element {
+}: TutorialOverlayProps) {
   return (
     <div
       className="
@@ -48,7 +48,6 @@ export default function TutorialOverlay({
           space-y-5
         "
       >
-        {/* Coach icon and label */}
         <div className="flex items-center justify-center gap-2">
           <span className="text-2xl font-bold text-emerald-300">C</span>
           <span className="text-sm font-semibold uppercase tracking-wider text-emerald-300">
@@ -56,12 +55,10 @@ export default function TutorialOverlay({
           </span>
         </div>
 
-        {/* The tutorial message */}
         <p className="text-base leading-relaxed text-emerald-50">
           {message}
         </p>
 
-        {/* Continue button */}
         <button
           id="tutorial-continue-btn"
           onClick={onContinue}

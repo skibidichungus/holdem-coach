@@ -11,13 +11,8 @@ import type {
 } from "../lib/types";
 
 // ─── Logic imports ───────────────────────────────────────────
-// Deck utilities for creating, shuffling, and dealing cards.
 import { createDeck, shuffleDeck, dealCards } from "../lib/deck";
-
-// Hand evaluation for determining winners at showdown.
 import { evaluateHand, compareHands } from "../lib/handEvaluator";
-
-// Tutorial coaching functions for guided mode messages & recommendations.
 import {
   getPhaseMessage,
   getRecommendedAction,
@@ -104,6 +99,8 @@ interface PokerState {
   resolveShowdown: () => void;
   /** Reset everything and start a fresh hand (alias for initializeGame). */
   resetGame: () => void;
+  /** Switch between guided and quick mode. Restarts the hand if one is in progress. */
+  setMode: (mode: GameMode) => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -187,52 +184,36 @@ export const usePokerStore = create<PokerState>((set, get) => ({
   // ═════════════════════════════════════════════════════════════
 
   /**
-   * Starts a new hand from scratch.
-   *
-   * 1. Creates and shuffles a fresh 52-card deck.
-   * 2. Deals 2 hole cards to the player and 2 to the opponent.
-   * 3. Resets the pot, bets, winner, and action history.
-   * 4. Sets the phase to "preflop".
-   * 5. Generates the opening tutorial message and recommended action.
+   * Starts a new hand: shuffles a fresh deck, deals hole cards to both
+   * players, generates the opening tutorial state, and resets all round fields.
    */
   initializeGame: (): void => {
-    // Step 1: Build and shuffle a fresh deck.
     const freshDeck: Card[] = shuffleDeck(createDeck());
 
-    // Step 2: Deal 2 cards to the player from the top of the deck.
     const playerDeal = dealCards(freshDeck, 2);
     const playerHand: Card[] = playerDeal.dealt;
 
-    // Step 3: Deal 2 cards to the opponent from the remaining deck.
     const opponentDeal = dealCards(playerDeal.remaining, 2);
     const opponentHand: Card[] = opponentDeal.dealt;
 
-    // Step 4: The rest of the deck stays for community cards later.
     const remainingDeck: Card[] = opponentDeal.remaining;
 
-    // Step 5: Generate the tutorial message for the preflop phase.
-    // No community cards exist yet, so we pass an empty array.
     const preflopMessage: string = getPhaseMessage(
       "preflop",
       playerHand,
       []
     );
 
-    // Step 6: Generate the recommended action for preflop.
     const preflopRecommendation: PlayerAction | null = getRecommendedAction(
       "preflop",
       playerHand,
       []
     );
 
-    // Step 7: Compute hand strength for the preflop display bar.
-    // No community cards yet, so pass an empty array.
     const preflopStrength = getHandStrength("preflop", playerHand, []);
 
-    // Step 8: Determine the current mode to decide if we pause.
     const currentMode: GameMode = get().mode;
 
-    // Step 9: Apply all state changes in a single update.
     set({
       deck: remainingDeck,
       communityCards: [],
@@ -253,7 +234,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       phase: "preflop",
       winner: null,
       actionHistory: [],
-      // Clear showdown labels from the previous hand.
       playerHandLabel: null,
       opponentHandLabel: null,
       tutorial: {
@@ -263,7 +243,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
         // In guided mode, pause so the player can read the tutorial message.
         awaitingContinue: currentMode === "guided",
         handStrength: preflopStrength,
-        // No draws are possible preflop.
         drawMessage: null,
       },
     });
@@ -296,11 +275,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
 
   /**
    * The player folds — they forfeit the hand and the opponent wins.
-   *
-   * 1. Marks the player as folded.
-   * 2. Sets the winner to "opponent".
-   * 3. Moves the phase to "showdown" (the hand is over).
-   * 4. Generates action feedback explaining the fold.
    */
   playerFold: (): void => {
     const state = get();
@@ -308,8 +282,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     const playerHand: Card[] = state.player.hand;
     const community: Card[] = state.communityCards;
 
-    // Generate feedback for folding.
-    // Pass the current recommendation so the feedback can compare.
     const feedback: string = getActionFeedback(
       "fold",
       state.tutorial.recommendedAction,
@@ -319,23 +291,18 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     );
 
     set({
-      // Mark the player as folded.
       player: { ...state.player, isFolded: true },
-      // The opponent wins by default when the player folds.
       winner: "opponent",
-      // Jump straight to showdown — the hand is over.
       phase: "showdown",
-      // Record this action in the history log.
       actionHistory: [
         ...state.actionHistory,
         { phase: currentPhase, action: "fold" as PlayerAction },
       ],
-      // Update the tutorial with fold feedback.
       tutorial: {
         ...state.tutorial,
         step: state.tutorial.step + 1,
         message: feedback,
-        recommendedAction: null, // No further action needed — hand is over.
+        recommendedAction: null,
         awaitingContinue: false,
       },
     });
@@ -347,12 +314,7 @@ export const usePokerStore = create<PokerState>((set, get) => ({
 
   /**
    * The player calls — they match the current bet to stay in the hand.
-   *
-   * 1. Adds the current bet to the pot (player's contribution).
-   * 2. Also adds the opponent's call (passive opponent always matches).
-   * 3. Records the action in the history.
-   * 4. Generates action feedback.
-   * 5. Advances to the next phase.
+   * The passive opponent always matches.
    */
   playerCall: (): void => {
     const state = get();
@@ -361,7 +323,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     const community: Card[] = state.communityCards;
     const betAmount: number = state.currentBet;
 
-    // Generate feedback for calling.
     const feedback: string = getActionFeedback(
       "call",
       state.tutorial.recommendedAction,
@@ -375,24 +336,19 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     const potIncrease: number = betAmount * 2;
 
     set({
-      // Add both players' bets to the pot.
       pot: state.pot + potIncrease,
-      // Deduct chips from the player.
       player: {
         ...state.player,
         chips: state.player.chips - betAmount,
       },
-      // Deduct chips from the opponent (passive — always calls).
       opponent: {
         ...state.opponent,
         chips: state.opponent.chips - betAmount,
       },
-      // Record this action in the history log.
       actionHistory: [
         ...state.actionHistory,
         { phase: currentPhase, action: "call" as PlayerAction },
       ],
-      // Show the feedback message before advancing.
       tutorial: {
         ...state.tutorial,
         step: state.tutorial.step + 1,
@@ -402,8 +358,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       },
     });
 
-    // After updating state, advance to the next phase.
-    // We call this after `set` so the state is consistent.
     get().advancePhase();
   },
 
@@ -413,12 +367,7 @@ export const usePokerStore = create<PokerState>((set, get) => ({
 
   /**
    * The player raises — they increase the bet by the given amount.
-   *
-   * 1. Increases the current bet by `amount`.
-   * 2. Adds both players' contributions to the pot (opponent always calls).
-   * 3. Records the action in the history.
-   * 4. Generates action feedback.
-   * 5. Advances to the next phase.
+   * The passive opponent always calls the raise.
    *
    * @param amount - The additional chips to raise on top of the current bet.
    */
@@ -428,10 +377,8 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     const playerHand: Card[] = state.player.hand;
     const community: Card[] = state.communityCards;
 
-    // The new bet is the old bet plus the raise amount.
     const newBet: number = state.currentBet + amount;
 
-    // Generate feedback for raising.
     const feedback: string = getActionFeedback(
       "raise",
       state.tutorial.recommendedAction,
@@ -440,31 +387,24 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       community
     );
 
-    // Both players put in the new bet amount.
     // The opponent is passive and always matches the raise.
     const potIncrease: number = newBet * 2;
 
     set({
-      // Update the current bet to the new higher amount.
       currentBet: newBet,
-      // Add both players' bets to the pot.
       pot: state.pot + potIncrease,
-      // Deduct chips from the player.
       player: {
         ...state.player,
         chips: state.player.chips - newBet,
       },
-      // Deduct chips from the opponent (passive — always calls the raise).
       opponent: {
         ...state.opponent,
         chips: state.opponent.chips - newBet,
       },
-      // Record this action in the history log.
       actionHistory: [
         ...state.actionHistory,
         { phase: currentPhase, action: "raise" as PlayerAction },
       ],
-      // Show the feedback message before advancing.
       tutorial: {
         ...state.tutorial,
         step: state.tutorial.step + 1,
@@ -474,7 +414,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       },
     });
 
-    // After updating state, advance to the next phase.
     get().advancePhase();
   },
 
@@ -539,42 +478,38 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       return;
     }
 
-    // Deal the required number of cards from the deck.
     const dealResult = dealCards(currentDeck, cardsToDeal);
     const newCommunityCards: Card[] = [
       ...currentCommunity,
       ...dealResult.dealt,
     ];
 
-    // Generate the tutorial message for the new phase.
-    // This tells the player what just happened and evaluates their hand.
+    // evaluateHand generates all C(n,5) five-card combinations — expensive.
+    // Evaluate once and pass the result to all three tutorial functions.
+    const evaluated = evaluateHand(playerHand, newCommunityCards);
+
     const phaseMessage: string = getPhaseMessage(
       nextPhase,
       playerHand,
-      newCommunityCards
+      newCommunityCards,
+      evaluated
     );
 
-    // Generate a recommended action for the new phase.
     const recommendation: PlayerAction | null = getRecommendedAction(
       nextPhase,
       playerHand,
-      newCommunityCards
+      newCommunityCards,
+      evaluated
     );
 
-    // Compute the updated hand strength for the strength bar.
-    const handStrength = getHandStrength(nextPhase, playerHand, newCommunityCards);
+    const handStrength = getHandStrength(nextPhase, playerHand, newCommunityCards, evaluated);
 
-    // Detect any draws (only relevant on flop and turn).
     const drawMessage: string | null = getDrawInfo(playerHand, newCommunityCards);
 
     set({
-      // Move to the next phase.
       phase: nextPhase,
-      // Update the deck (cards have been removed).
       deck: dealResult.remaining,
-      // Add the new community cards to the board.
       communityCards: newCommunityCards,
-      // Update the tutorial with the new phase message and recommendation.
       tutorial: {
         ...state.tutorial,
         step: state.tutorial.step + 1,
@@ -595,10 +530,6 @@ export const usePokerStore = create<PokerState>((set, get) => ({
 
   /**
    * Evaluates both players' hands and determines the winner.
-   *
-   * Uses `evaluateHand` to find each player's best 5-card hand,
-   * then `compareHands` to see who wins. Updates the winner field
-   * and generates the showdown tutorial message.
    */
   resolveShowdown: (): void => {
     const state = get();
@@ -606,15 +537,11 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     const playerHand: Card[] = state.player.hand;
     const opponentHand: Card[] = state.opponent.hand;
 
-    // Evaluate the best 5-card hand for each player.
     const playerEval = evaluateHand(playerHand, community);
     const opponentEval = evaluateHand(opponentHand, community);
 
-    // Compare the two hands.
-    // Positive = player wins, negative = opponent wins, zero = tie.
     const comparison: number = compareHands(playerEval, opponentEval);
 
-    // Determine the winner based on the comparison result.
     let result: "player" | "opponent" | "tie";
     if (comparison > 0) {
       result = "player";
@@ -624,31 +551,28 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       result = "tie";
     }
 
-    // Use the rich comparison message instead of the generic showdown message.
-    // This names both hands and explains why one beats the other.
     const showdownMessage: string = getShowdownMessage(
       playerEval,
       opponentEval,
       result
     );
 
-    // Compute final hand strength for display at showdown.
-    const showdownStrength = getHandStrength("showdown", playerHand, community);
+    // Reuse the player's already-evaluated hand to avoid a redundant evaluateHand call.
+    const showdownStrength = getHandStrength("showdown", playerHand, community, playerEval);
 
     set({
       phase: "showdown",
       winner: result,
-      // Store both hand labels so the UI can display them near the cards.
       playerHandLabel: playerEval.label,
       opponentHandLabel: opponentEval.label,
       tutorial: {
         ...state.tutorial,
         step: state.tutorial.step + 1,
         message: showdownMessage,
-        recommendedAction: null, // No actions at showdown — the hand is over.
+        recommendedAction: null,
         awaitingContinue: false,
         handStrength: showdownStrength,
-        drawMessage: null, // No draws at showdown — all cards are revealed.
+        drawMessage: null,
       },
     });
   },
@@ -663,5 +587,20 @@ export const usePokerStore = create<PokerState>((set, get) => ({
    */
   resetGame: (): void => {
     get().initializeGame();
+  },
+
+  // ═════════════════════════════════════════════════════════════
+  //  ACTION: SET MODE
+  // ═════════════════════════════════════════════════════════════
+
+  /**
+   * Switches between "guided" and "quick" mode. If a hand is in
+   * progress, reinitializes so the new mode takes effect immediately.
+   */
+  setMode: (mode: GameMode): void => {
+    set({ mode });
+    if (get().player.hand.length > 0) {
+      get().initializeGame();
+    }
   },
 }));

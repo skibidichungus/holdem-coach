@@ -3,25 +3,24 @@
 import { useEffect } from "react";
 import { usePokerStore } from "../store/usePokerStore";
 import PokerTable from "../components/PokerTable";
+import ModeSelector from "../components/ModeSelector";
+import HandGuideButton from "../components/HandGuideButton";
 
-// ─── Home Page ──────────────────────────────────────────────
-// The main (and only) page of the app.
-// On mount, it initializes the game so the player immediately sees
-// their first hand. Then it renders the PokerTable component,
-// which handles all the game UI.
-
-export default function Home(): JSX.Element {
-  // Pull the initializeGame action from the store.
+export default function Home() {
   const initializeGame = usePokerStore((state) => state.initializeGame);
 
-  // Start the first hand as soon as the component mounts.
-  // The empty dependency array [] means this runs exactly once.
   useEffect(() => {
     initializeGame();
   }, [initializeGame]);
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-4">
+    <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
+      {/* Controls row: mode selector + hand guide button */}
+      <div className="flex items-center gap-6">
+        <ModeSelector />
+        <HandGuideButton />
+      </div>
+
       <PokerTable />
     </main>
   );

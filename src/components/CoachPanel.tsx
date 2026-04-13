@@ -2,7 +2,6 @@
 
 import type { HandStrength } from "../lib/types";
 
-// ─── Props ──────────────────────────────────────────────────
 interface CoachPanelProps {
   /** The tutorial message to display to the player. */
   message: string;
@@ -12,9 +11,7 @@ interface CoachPanelProps {
   drawMessage: string | null;
 }
 
-// ─── Strength Bar Config ─────────────────────────────────────
-// Map each level to a Tailwind background color class for the fill bar.
-// Colors range visually from red (weak) through yellow to green (nuts).
+// Map each level to a Tailwind background color for the strength bar fill.
 const LEVEL_BAR_COLOR: Record<HandStrength["level"], string> = {
   "Nothing Yet": "bg-gray-500",
   Weak: "bg-red-500",
@@ -24,7 +21,6 @@ const LEVEL_BAR_COLOR: Record<HandStrength["level"], string> = {
   Nuts: "bg-green-400",
 };
 
-// ─── Component ──────────────────────────────────────────────
 /**
  * A persistent panel that displays the tutorial coach's message,
  * a hand strength meter, and (when present) a draw detection callout.
@@ -37,13 +33,12 @@ export default function CoachPanel({
   message,
   handStrength,
   drawMessage,
-}: CoachPanelProps): JSX.Element {
+}: CoachPanelProps) {
   // Don't render anything until the first hand is dealt.
   if (!message) {
     return <></>;
   }
 
-  // Pick the bar fill color for the current strength level.
   const barColor: string = LEVEL_BAR_COLOR[handStrength.level];
 
   return (
@@ -59,16 +54,13 @@ export default function CoachPanel({
         space-y-4
       "
     >
-      {/* ── Coach label ── */}
       <div className="flex items-center gap-2">
-        {/* Coach icon */}
         <span className="text-lg font-bold text-emerald-300">C</span>
         <span className="text-xs font-semibold uppercase tracking-wider text-emerald-300">
           Coach
         </span>
       </div>
 
-      {/* ── Tutorial message ── */}
       <p className="text-sm leading-relaxed text-emerald-50">
         {message}
       </p>
@@ -79,7 +71,7 @@ export default function CoachPanel({
         percentage value, changing colour from red (weak) to green (strong).
       */}
       <div className="space-y-1.5">
-        {/* Label row: "Hand Strength" on the left, level name on the right */}
+      {/* Label row: level name on the right */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider">
             Hand Strength
@@ -89,9 +81,8 @@ export default function CoachPanel({
           </span>
         </div>
 
-        {/* Track: full-width gray background */}
         <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-          {/* Fill: animated width transition so the bar grows smoothly */}
+          {/* Animated fill bar */}
           <div
             className={`h-full rounded-full transition-all duration-500 ease-out ${barColor}`}
             style={{ width: `${handStrength.percentage}%` }}
@@ -115,7 +106,6 @@ export default function CoachPanel({
             px-3 py-2.5
           "
         >
-          {/* Draw alert icon */}
           <span className="text-amber-400 text-sm font-bold mt-0.5">!</span>
           <p className="text-xs leading-relaxed text-amber-200">
             {drawMessage}
