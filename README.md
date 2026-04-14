@@ -31,6 +31,7 @@ The app supports two modes: **guided mode**, where gameplay pauses between phase
 - **TypeScript** — strict mode throughout
 - **Tailwind CSS 4** — utility-first styling
 - **Zustand 5** — lightweight state management
+- **Vitest** — unit testing for game logic
 
 ## Project Structure
 
@@ -51,14 +52,15 @@ src/
     HandGuideButton.tsx   — toggle button for the hand rankings panel
     HandRankingsPanel.tsx — slide-out drawer showing all 10 hand types with examples
   lib/
-    types.ts              — all shared types and enums
-    constants.ts          — shared rank-name maps (single source of truth)
-    deck.ts               — deck creation, shuffle, deal
-    handEvaluator.ts      — hand ranking, scoring, and comparison
-    handExamples.ts       — example card data for the hand rankings guide
-    tutorial.ts           — coaching messages, recommendations, feedback, hand strength, draw detection
+    types.ts                   — all shared types and enums
+    constants.ts               — shared rank-name maps (single source of truth)
+    deck.ts                    — deck creation, shuffle, deal
+    handEvaluator.ts           — hand ranking, scoring, and comparison
+    handEvaluator.test.ts      — unit tests (20 tests, all hand types + edge cases)
+    handExamples.ts            — example card data for the hand rankings guide
+    tutorial.ts                — coaching messages, recommendations, feedback, hand strength, draw detection
   store/
-    usePokerStore.ts      — Zustand store managing all game + tutorial state
+    usePokerStore.ts           — Zustand store managing all game + tutorial state
 ```
 
 ## Getting Started
@@ -71,6 +73,15 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to play.
+
+## Running Tests
+
+```bash
+npm test          # run all tests once
+npm run test:watch  # watch mode — re-runs on file changes
+```
+
+The test suite covers all 10 hand types, ace-low straight edge cases, kicker tie-breaking, and best-hand selection from 7 cards.
 
 ## Architecture Decisions
 
