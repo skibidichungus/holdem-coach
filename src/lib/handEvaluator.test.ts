@@ -203,4 +203,33 @@ describe("handEvaluator", () => {
       expect(result.rank).toBe(HandRank.RoyalFlush);
     });
   });
+
+  // ── 3d. Card ordering ──────────────────────────────────────────────────────
+  describe("evaluateHand — cards field ordering", () => {
+    it("populates cards with matched rank first for pair", () => {
+      const result = evaluateHand(
+        [c(13, "spades"), c(13, "hearts")],
+        [c(9, "diamonds"), c(6, "clubs"), c(3, "spades"), c(2, "diamonds"), c(7, "hearts")]
+      );
+      expect(result.cards[0].rank).toBe(13);
+      expect(result.cards[1].rank).toBe(13);
+      expect(result.cards[2].rank).toBe(9); // top kicker
+    });
+
+    it("populates cards in descending order for straight (ace-high)", () => {
+      const result = evaluateHand(
+        [c(10, "spades"), c(9, "hearts")],
+        [c(8, "diamonds"), c(7, "clubs"), c(6, "spades"), c(14, "hearts"), c(13, "diamonds")]
+      );
+      expect(result.cards.map((card) => card.rank)).toEqual([10, 9, 8, 7, 6]);
+    });
+
+    it("populates cards with ace last for wheel straight", () => {
+      const result = evaluateHand(
+        [c(14, "spades"), c(2, "hearts")],
+        [c(3, "diamonds"), c(4, "clubs"), c(5, "spades"), c(13, "hearts"), c(12, "diamonds")]
+      );
+      expect(result.cards.map((card) => card.rank)).toEqual([5, 4, 3, 2, 14]);
+    });
+  });
 });

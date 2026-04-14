@@ -48,3 +48,15 @@ export const RANK_NAMES_PLURAL: Record<number, string> = {
   13: "Kings",
   14: "Aces",
 };
+
+/**
+ * Maps each suit to its singular human-readable name (lowercase).
+ *
+ * Used for draw descriptions like "any heart" or "a 5 of spades".
+ */
+export const SUIT_NAMES: Record<string, string> = {
+  hearts: "heart",
+  diamonds: "diamond",
+  clubs: "club",
+  spades: "spade",
+};

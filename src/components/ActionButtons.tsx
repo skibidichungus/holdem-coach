@@ -1,7 +1,7 @@
 "use client";
 
 import { usePokerStore } from "../store/usePokerStore";
-import type { PlayerAction } from "../lib/types";
+import type { GameMode, PlayerAction } from "../lib/types";
 
 /**
  * Three action buttons: Fold, Call, and Raise.
@@ -18,6 +18,7 @@ export default function ActionButtons() {
   const phase = usePokerStore((state) => state.phase);
   const currentBet: number = usePokerStore((state) => state.currentBet);
   const tutorial = usePokerStore((state) => state.tutorial);
+  const mode: GameMode = usePokerStore((state) => state.mode);
   const playerFold = usePokerStore((state) => state.playerFold);
   const playerCall = usePokerStore((state) => state.playerCall);
   const playerRaise = usePokerStore((state) => state.playerRaise);
@@ -42,39 +43,50 @@ export default function ActionButtons() {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      {/* ── FOLD Button ── */}
-      <ActionButton
-        label="Fold"
-        id="action-fold"
-        onClick={playerFold}
-        disabled={isDisabled}
-        recommended={isRecommended("fold")}
-        variant="danger"
-      />
+    <>
+      <div className="flex items-center gap-3">
+        {/* ── FOLD Button ── */}
+        <ActionButton
+          label="Fold"
+          id="action-fold"
+          onClick={playerFold}
+          disabled={isDisabled}
+          recommended={isRecommended("fold")}
+          variant="danger"
+        />
 
-      {/* ── CALL Button ── */}
-      <ActionButton
-        label={`Call (${currentBet})`}
-        id="action-call"
-        onClick={playerCall}
-        disabled={isDisabled}
-        recommended={isRecommended("call")}
-        variant="neutral"
-      />
+        {/* ── CALL Button ── */}
+        <ActionButton
+          label={`Call (${currentBet})`}
+          id="action-call"
+          onClick={playerCall}
+          disabled={isDisabled}
+          recommended={isRecommended("call")}
+          variant="neutral"
+        />
 
-      {/* ── RAISE Button ── */}
-      <ActionButton
-        label={`Raise (${currentBet + raiseAmount})`}
-        id="action-raise"
-        onClick={() => playerRaise(raiseAmount)}
-        disabled={isDisabled}
-        recommended={isRecommended("raise")}
-        variant="primary"
-      />
-    </div>
+        {/* ── RAISE Button ── */}
+        <ActionButton
+          label={`Raise (${currentBet + raiseAmount})`}
+          id="action-raise"
+          onClick={() => playerRaise(raiseAmount)}
+          disabled={isDisabled}
+          recommended={isRecommended("raise")}
+          variant="primary"
+        />
+      </div>
+
+      {/* ── RATIONALE ── */}
+      {/* Only shown in guided mode, when there's a recommendation, and the tutorial isn't paused. */}
+      {mode === "guided" && tutorial.rationale && recommended && !tutorial.awaitingContinue && (
+        <p className="text-xs text-slate-300 italic max-w-md text-center mt-2">
+          {tutorial.rationale}
+        </p>
+      )}
+    </>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════════
 //  SUB-COMPONENT: SINGLE ACTION BUTTON

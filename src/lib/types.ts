@@ -36,6 +36,8 @@ export interface EvaluatedHand {
   rank: HandRank; // Which of the ten hand types this is
   score: number; // A composite number for tie-breaking (e.g. rank * 1000 + kickers)
   label: string; // A human-readable description, e.g. "Pair of Kings"
+  /** The best 5 cards that make up this hand, ordered by relevance (primary made-hand cards first, then kickers). */
+  cards: Card[];
 }
 
 // ─── Player ──────────────────────────────────────────────────
@@ -61,6 +63,9 @@ export type PlayerAction = "fold" | "call" | "raise";
 // "quick"  = free-play mode with no hand-holding.
 export type GameMode = "guided" | "quick";
 
+/** Who is on the dealer button this hand. The button holder is the small blind in heads-up. */
+export type Position = "player" | "opponent";
+
 // ─── Tutorial ────────────────────────────────────────────────
 
 // A rough 0–100 hand strength estimate with a human-readable tier label.
@@ -68,6 +73,28 @@ export type GameMode = "guided" | "quick";
 export interface HandStrength {
   level: "Nothing Yet" | "Weak" | "Decent" | "Strong" | "Monster" | "Nuts";
   percentage: number; // 0–100 — fills the strength bar in the UI
+}
+
+/** The kinds of drawing hands the coach can recognize. */
+export type DrawType =
+  | "flush"
+  | "open-ended-straight"
+  | "gutshot"
+  | "straight-flush"
+  | "open-ended-straight-flush"
+  | "overcards";
+
+/** A structured representation of a drawing hand, used to generate rationale text. */
+export interface DrawDetails {
+  type: DrawType;
+  /** Number of cards in the remaining deck that complete the draw. */
+  outs: number;
+  /** Rough probability (0-100) of completing by the river, given current phase. */
+  equity: number;
+  /** Short human-friendly label, e.g. "flush draw", "open-ended straight draw". */
+  label: string;
+  /** Plain-English description of what card(s) complete the draw, e.g. "any heart", "a 6", "a 4 or a 9". */
+  outsDescription: string;
 }
 
 // Tracks where the learner is inside the guided tutorial flow.
@@ -78,4 +105,8 @@ export interface TutorialState {
   awaitingContinue: boolean; // True when the UI is waiting for the player to click "Continue"
   handStrength: HandStrength; // Current hand strength level and percentage
   drawMessage: string | null; // Draw detection message (flush/straight draw, etc.) or null
+  /** Structured draw info if a draw is present, null otherwise. */
+  drawDetails: DrawDetails | null;
+  /** One-sentence explanation for the current recommendation. Null before first recommendation. */
+  rationale: string | null;
 }

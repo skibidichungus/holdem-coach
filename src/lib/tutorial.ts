@@ -1,7 +1,7 @@
-import type { Card, GamePhase, PlayerAction, Rank, HandStrength, EvaluatedHand } from "./types";
+import type { Card, DrawDetails, EvaluatedHand, GamePhase, PlayerAction, Position, Rank, HandStrength } from "./types";
 import { HandRank } from "./types";
 import { evaluateHand } from "./handEvaluator";
-import { RANK_NAMES } from "./constants";
+import { RANK_NAMES, SUIT_NAMES } from "./constants";
 
 // Maps a HandRank enum value to a beginner-friendly label.
 // These are simpler than the handEvaluator labels — no kickers, just the category.
@@ -163,6 +163,9 @@ function friendlyHandLabel(handRank: HandRank): string {
  * @param phase          - The current game phase (preflop, flop, turn, river, showdown).
  * @param holeCards      - The player's two private hole cards.
  * @param communityCards - The shared community cards on the board (empty for preflop).
+ * @param preComputed    - Optional pre-evaluated hand to avoid redundant work.
+ * @param handNumber     - Optional session hand number (1-indexed). Passed in guided mode only.
+ * @param dealerButton   - Optional position that holds the dealer button. Passed in guided mode only.
  * @returns A beginner-friendly instructional message.
  *
  * @example
@@ -173,7 +176,9 @@ export function getPhaseMessage(
   phase: GamePhase,
   holeCards: Card[],
   communityCards: Card[],
-  preComputed?: EvaluatedHand
+  preComputed?: EvaluatedHand,
+  handNumber?: number,
+  dealerButton?: Position
 ): string {
   switch (phase) {
     // ── Preflop: explain hole cards and comment on starting strength ──
@@ -192,7 +197,23 @@ export function getPhaseMessage(
             ? "that's a decent hand with potential."
             : "that's a weak hand — consider folding unless you want to bluff.";
 
-      return `You've been dealt your hole cards — these are private to you. You have ${card1Name}-${card2Name} ${description} — ${strengthComment}`;
+      // ── Blind prefix (guided mode only, when handNumber and dealerButton are provided) ──
+      // Hand 1: full explanation of the heads-up blind structure.
+      // Hand 2+: concise note about which position the player is in this hand.
+      let blindPrefix: string = "";
+      if (handNumber === 1 && dealerButton !== undefined) {
+        blindPrefix =
+          dealerButton === "player"
+            ? "You're on the button this hand, which makes you the small blind (10 chips posted). The opponent is the big blind (20 chips). In heads-up poker, the button posts less but acts first preflop. "
+            : "The opponent is on the button this hand, making them the small blind (10 chips posted). You're the big blind (20 chips). The big blind always puts in more, but gets to act last preflop after the button has decided. ";
+      } else if (handNumber !== undefined && handNumber > 1 && dealerButton !== undefined) {
+        blindPrefix =
+          dealerButton === "player"
+            ? "You have the button this hand — you're the small blind. "
+            : "Opponent has the button this hand — you're the big blind. ";
+      }
+
+      return `${blindPrefix}You've been dealt your hole cards — these are private to you. You have ${card1Name}-${card2Name} ${description} — ${strengthComment}`;
     }
 
     case "flop": {
@@ -610,122 +631,253 @@ export function getHandStrength(
   return { level: "Nothing Yet", percentage: 0 };
 }
 
-// ═════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 //  EXPORTED: DRAW DETECTION
-// ═════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
 
 /**
- * Detects common drawing situations on the flop or turn and returns
- * a short, encouraging message for the player, or null if no notable
- * draw exists.
+ * Returns structured draw details for the player's hand, or null if no draw is present.
  *
- * Priority (highest first):
- *   1. Flush draw (4 cards of the same suit)
- *   2. Open-ended straight draw (4 consecutive ranks)
- *   3. Gutshot straight draw (4 of 5 consecutive ranks, one gap)
- *   4. Overcards (both hole cards outrank every community card)
+ * Uses the "rule of 4 and 2" for approximate equity:
+ *   - Flop (2 cards to come): outs × 4
+ *   - Turn (1 card to come):  outs × 2
  *
- * Only meaningful on the flop and turn — returns null otherwise.
+ * Priority order (strongest draw reported first):
+ *   1. Open-ended straight flush (4 consecutive suited cards)
+ *   2. Gutshot straight flush (4 suited cards missing one rank in a 5-card window)
+ *   3. Flush draw (4 of same suit, no SF progression)
+ *   4. Open-ended straight draw (4 consecutive ranks)
+ *   5. Gutshot straight draw (one-gap)
+ *   6. Overcards (both hole cards above every community card, no pair)
+ *
+ * Returns null on preflop and river (nothing to draw to), and when the
+ * player already has a made hand stronger than one pair (except SF draws).
  *
  * @param holeCards      - The player's two private hole cards.
  * @param communityCards - The community cards currently on the board.
- * @returns A short draw message, or null if no draw is detected.
- *
- * @example
- * getDrawInfo(holeCards, [flopCard1, flopCard2, flopCard3])
- * // → "You're one card away from a flush!"
+ * @param phase          - Current game phase.
+ * @returns Structured draw info, or null.
  */
-export function getDrawInfo(
+export function getDrawDetails(
   holeCards: Card[],
-  communityCards: Card[]
-): string | null {
-  // Only check for draws when there are 3–4 community cards (flop or turn).
-  // Preflop has no community cards; river/showdown have all 5 (no cards left to hit).
-  if (communityCards.length < 3 || communityCards.length > 4) {
-    return null;
-  }
+  communityCards: Card[],
+  phase: GamePhase
+): DrawDetails | null {
+  // Only meaningful on flop (3 community cards) or turn (4 community cards).
+  if (phase !== "flop" && phase !== "turn") return null;
+  if (communityCards.length < 3 || communityCards.length > 4) return null;
 
-  // Combine hole cards and community cards into one pool for analysis.
+  // Multiplier for the rule of 4 and 2.
+  const equityMultiplier: number = phase === "flop" ? 4 : 2;
+
   const allCards: Card[] = [...holeCards, ...communityCards];
 
-  // ── 1. FLUSH DRAW: 4 cards of the same suit ──
-  // Count how many cards share each suit.
-  const suitCounts: Record<string, number> = {};
+  // ── Check if the player already has a made hand > OnePair ──
+  // If so, skip most draw reporting (they're not "drawing" in the usual sense).
+  // Exception: SF draws are still reported even over made flushes.
+  const currentEval = evaluateHand(holeCards, communityCards);
+  const hasMadeHandAbovePair: boolean = currentEval.rank > HandRank.OnePair;
+
+  // ── Group cards by suit for straight-flush detection ──
+  const suitCards: Record<string, Card[]> = {};
   for (const card of allCards) {
-    suitCounts[card.suit] = (suitCounts[card.suit] ?? 0) + 1;
-  }
-  // If any suit has exactly 4 cards, the player has a flush draw.
-  const hasFlushDraw: boolean = Object.values(suitCounts).some(
-    (count: number) => count === 4
-  );
-  if (hasFlushDraw) {
-    return "You're one card away from a flush!";
+    if (!suitCards[card.suit]) suitCards[card.suit] = [];
+    suitCards[card.suit].push(card);
   }
 
-  // ── 2. STRAIGHT DRAWS: check sorted unique ranks for consecutive sequences ──
-
-  // Collect unique ranks and sort them ascending.
-  // We also add rank 1 if an Ace is present (Ace can play low in A-2-3-4-5).
-  const rawRanks: number[] = allCards.map((c: Card) => c.rank);
-  const uniqueRanks: number[] = [...new Set(rawRanks)].sort(
-    (a: number, b: number) => a - b
-  );
-
-  // If there's an Ace (rank 14), also treat it as a 1 for wheel straights.
-  if (uniqueRanks.includes(14)) {
-    uniqueRanks.unshift(1);
+  // ── 1. OPEN-ENDED STRAIGHT FLUSH: 4 consecutive suited cards ──
+  for (const cards of Object.values(suitCards)) {
+    if (cards.length < 4) continue;
+    const suitedRanks: number[] = [...new Set(cards.map((c) => c.rank))].sort(
+      (a, b) => a - b
+    );
+    if (suitedRanks.includes(14)) suitedRanks.unshift(1);
+    // Slide a 4-wide window over the sorted suited ranks.
+    for (let i = 0; i <= suitedRanks.length - 4; i++) {
+      const w = suitedRanks.slice(i, i + 4);
+      if (w[3] - w[0] === 3 && new Set(w).size === 4) {
+        const outs = 15;
+        // The two completing ranks are one below the window's low and one above its high.
+        const suitName: string = SUIT_NAMES[cards[0].suit] ?? cards[0].suit;
+        const lo: number = w[0] === 1 ? 2 : w[0];
+        const hi: number = w[3];
+        const loName: string = RANK_NAMES[lo] ?? String(lo);
+        const hiName: string = RANK_NAMES[hi + 1] ?? String(hi + 1);
+        const outsDescription = `a ${loName.toLowerCase()} of ${suitName} or a ${hiName.toLowerCase()} of ${suitName}`;
+        return {
+          type: "open-ended-straight-flush",
+          outs,
+          equity: Math.min(100, outs * equityMultiplier),
+          label: "open-ended straight flush draw",
+          outsDescription,
+        };
+      }
+    }
   }
 
-  // Helper: given a sorted list of unique ranks, count the longest unbroken
-  // run of consecutively incremented values (e.g. [4,5,6,7] → 4).
-  // Also detects gutshots — a run of 4 with exactly one gap.
-  let longestRun: number = 1; // at minimum a single card
+  // ── 2. GUTSHOT STRAIGHT FLUSH: 4 suited cards in a 5-card window with one gap ──
+  for (const cards of Object.values(suitCards)) {
+    if (cards.length < 4) continue;
+    const suitedRanks: number[] = [...new Set(cards.map((c) => c.rank))].sort(
+      (a, b) => a - b
+    );
+    if (suitedRanks.includes(14)) suitedRanks.unshift(1);
+    for (let lo = 1; lo <= 10; lo++) {
+      const window = [lo, lo + 1, lo + 2, lo + 3, lo + 4];
+      const present = window.filter((r) => suitedRanks.includes(r));
+      if (present.length === 4) {
+        const suitName: string = SUIT_NAMES[cards[0].suit] ?? cards[0].suit;
+        const missing: number = window.find((r) => !present.includes(r))!;
+        const missingName: string = RANK_NAMES[missing] ?? String(missing);
+        const outsDescription = `a ${missingName.toLowerCase()} of ${suitName}`;
+        return {
+          type: "straight-flush",
+          outs: 1,
+          equity: Math.min(100, 1 * equityMultiplier),
+          label: "gutshot straight flush draw",
+          outsDescription,
+        };
+      }
+    }
+  }
+
+  // ── 3. FLUSH DRAW: 4 cards of the same suit ──
+  for (const [suit, cards] of Object.entries(suitCards)) {
+    if (cards.length === 4) {
+      if (hasMadeHandAbovePair) return null;
+      const suitName: string = SUIT_NAMES[suit] ?? suit;
+      return {
+        type: "flush",
+        outs: 9,
+        equity: Math.min(100, 9 * equityMultiplier),
+        label: "flush draw",
+        outsDescription: `any ${suitName}`,
+      };
+    }
+  }
+
+  if (hasMadeHandAbovePair) return null;
+
+  // ── 4 & 5. STRAIGHT DRAWS: scan sorted unique ranks ──
+  const rawRanks: number[] = allCards.map((c) => c.rank);
+  const uniqueRanks: number[] = [...new Set(rawRanks)].sort((a, b) => a - b);
+  if (uniqueRanks.includes(14)) uniqueRanks.unshift(1);
+
+  let longestRun: number = 1;
   let currentRun: number = 1;
-  let hasGutshot: boolean = false;
+  let gutshotDetected: boolean = false;
 
-  for (let i: number = 1; i < uniqueRanks.length; i++) {
+  for (let i = 1; i < uniqueRanks.length; i++) {
     const gap: number = uniqueRanks[i] - uniqueRanks[i - 1];
     if (gap === 1) {
-      // Consecutive — extend the current run.
       currentRun++;
       longestRun = Math.max(longestRun, currentRun);
     } else if (gap === 2 && currentRun >= 3) {
-      // One-card gap inside a run of at least 3 — this is a gutshot.
-      // (e.g. 5-6-8 has a gap at 7; if we also have 9 that's 5-6-?-8-9)
-      hasGutshot = true;
-      currentRun++; // the gutshot card counts toward the 4-card window
+      gutshotDetected = true;
+      currentRun++;
       longestRun = Math.max(longestRun, currentRun);
     } else {
-      // Gap too large — reset the run.
       currentRun = 1;
     }
   }
 
-  // Open-ended straight draw: 4 consecutive ranks (can be completed at either end).
-  if (longestRun >= 4 && !hasGutshot) {
-    return "You have an open-ended straight draw — two cards could complete it.";
+  // Open-ended straight draw: 4+ consecutive ranks, no gap.
+  if (longestRun >= 4 && !gutshotDetected) {
+    // Find the 4-card run and compute the two completing ranks.
+    let runStart = 0;
+    let runLen = 1;
+    for (let i = 1; i < uniqueRanks.length; i++) {
+      if (uniqueRanks[i] - uniqueRanks[i - 1] === 1) {
+        runLen++;
+        if (runLen >= 4) {
+          runStart = i - runLen + 1;
+        }
+      } else {
+        if (runLen < 4) runLen = 1;
+      }
+    }
+    const runLow: number = uniqueRanks[runStart] === 1 ? 2 : uniqueRanks[runStart];
+    const runHigh: number = uniqueRanks[runStart + runLen - 1];
+    const lowName: string = RANK_NAMES[runLow - 1] ?? String(runLow - 1);
+    const highName: string = RANK_NAMES[runHigh + 1] ?? String(runHigh + 1);
+    const outsDescription = `a ${RANK_NAMES[runLow - 1] ? lowName.toLowerCase() : String(runLow - 1)} or a ${RANK_NAMES[runHigh + 1] ? highName.toLowerCase() : String(runHigh + 1)}`;
+    return {
+      type: "open-ended-straight",
+      outs: 8,
+      equity: Math.min(100, 8 * equityMultiplier),
+      label: "open-ended straight draw",
+      outsDescription,
+    };
   }
 
-  // Gutshot straight draw: 4 of 5 sequential ranks with one gap in the middle.
-  if (hasGutshot || longestRun >= 4) {
-    return "You have a gutshot straight draw — one specific card completes your straight.";
+  // Gutshot straight draw: 4 of 5 sequential ranks with one gap.
+  if (gutshotDetected || longestRun >= 4) {
+    // Find the gap rank by scanning for the 5-card window with 4 present.
+    let missingRank: number = 0;
+    outer: for (let lo = 1; lo <= 10; lo++) {
+      const window = [lo, lo + 1, lo + 2, lo + 3, lo + 4];
+      const present = window.filter((r) => uniqueRanks.includes(r));
+      if (present.length === 4) {
+        missingRank = window.find((r) => !present.includes(r))!;
+        break outer;
+      }
+    }
+    const missingName: string = RANK_NAMES[missingRank] ?? String(missingRank);
+    return {
+      type: "gutshot",
+      outs: 4,
+      equity: Math.min(100, 4 * equityMultiplier),
+      label: "gutshot straight draw",
+      outsDescription: `a ${missingName}`,
+    };
   }
 
-  // ── 3. OVERCARDS: both hole cards outrank every community card ──
-  // This means the player could improve significantly by pairing either hole card.
+  // ── 6. OVERCARDS: both hole cards outrank every community card, no pair yet ──
   const maxCommunityRank: number = Math.max(
-    ...communityCards.map((c: Card) => c.rank)
+    ...communityCards.map((c) => c.rank)
   );
-  const bothOvercards: boolean =
-    holeCards.every((c: Card) => c.rank > maxCommunityRank);
+  const bothOvercards: boolean = holeCards.every(
+    (c) => c.rank > maxCommunityRank
+  );
 
-  if (bothOvercards) {
-    return "Both your cards are higher than the board — you could pair up.";
+  if (bothOvercards && currentEval.rank < HandRank.OnePair) {
+    const r1: number = holeCards[0].rank;
+    const r2: number = holeCards[1].rank;
+    const highRankName: string = RANK_NAMES[Math.max(r1, r2)] ?? "";
+    const lowRankName: string = RANK_NAMES[Math.min(r1, r2)] ?? "";
+    return {
+      type: "overcards",
+      outs: 6,
+      equity: Math.min(100, 6 * equityMultiplier),
+      label: "overcard draw",
+      outsDescription: `a ${highRankName} or a ${lowRankName} to pair up`,
+    };
   }
 
-  // No notable draw detected.
   return null;
 }
+
+/**
+ * Backward-compatible string wrapper around `getDrawDetails`.
+ *
+ * Retained so existing call sites that only need a display string continue to work.
+ * For new code, prefer `getDrawDetails` to access the structured data.
+ *
+ * @param holeCards      - The player's two private hole cards.
+ * @param communityCards - The community cards currently on the board.
+ * @param phase          - Current game phase (defaults to "flop" for old call sites).
+ * @returns A short draw message string, or null if no draw.
+ */
+export function getDrawInfo(
+  holeCards: Card[],
+  communityCards: Card[],
+  phase: GamePhase = "flop"
+): string | null {
+  const details = getDrawDetails(holeCards, communityCards, phase);
+  if (!details) return null;
+  return `You have a ${details.label} — ${details.outs} outs, ~${details.equity}% to hit by the river.`;
+}
+
 
 // ═════════════════════════════════════════════════════════════
 //  EXPORTED: SHOWDOWN COMPARISON MESSAGE
@@ -817,4 +969,184 @@ export function getShowdownMessage(
   return hint
     ? `${handIntro} ${outcome} ${hint}`
     : `${handIntro} ${outcome}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  EXPORTED: RECOMMENDATION RATIONALE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Returns a one-sentence explanation of why the coach is recommending the given action.
+ *
+ * Explains hand strength, draws, and risk trade-offs in beginner-friendly language.
+ * Returns an empty string when there is no recommendation (prevents stale text in the UI).
+ *
+ * @param phase          - Current game phase.
+ * @param holeCards      - Player's 2 hole cards.
+ * @param communityCards - Shared board cards (empty for preflop).
+ * @param recommendation - What the coach is suggesting (null if no suggestion).
+ * @param opponentAction - What the opponent just did, if anything. Affects risk framing.
+ * @param preComputed    - Optional pre-evaluated hand to avoid redundant evaluateHand calls.
+ * @returns A one-sentence rationale string, or "" if no recommendation.
+ */
+export function getRecommendationRationale(
+  phase: GamePhase,
+  holeCards: Card[],
+  communityCards: Card[],
+  recommendation: PlayerAction | null,
+  opponentAction: PlayerAction | null,
+  preComputed?: EvaluatedHand
+): string {
+  if (recommendation === null) return "";
+
+  // ── PREFLOP ──────────────────────────────────────────────────
+  if (phase === "preflop") {
+    const label: string = buildHoleCardsLabel(holeCards);
+    const oppRaiseSuffix: string =
+      opponentAction === "raise"
+        ? " The opponent raised — be more selective than usual."
+        : "";
+
+    if (recommendation === "fold") {
+      return `${label} rarely wins at showdown — folding now saves chips for stronger starting hands.`;
+    }
+    if (recommendation === "call") {
+      return `${label} is playable but not strong enough to raise with — calling keeps you in cheaply.${oppRaiseSuffix}`;
+    }
+    // raise
+    return `${label} is a premium starting hand. Raise now to build the pot while you're likely ahead.${oppRaiseSuffix}`;
+  }
+
+  // ── POST-FLOP (flop, turn, river) ────────────────────────────
+  const evaluated: EvaluatedHand =
+    preComputed ?? evaluateHand(holeCards, communityCards);
+  const handRank: HandRank = evaluated.rank;
+  const handLabel: string = friendlyHandLabel(handRank);
+
+  // Ingredient 1: made hand strength sentence.
+  let strengthSentence: string;
+  if (handRank >= HandRank.ThreeOfAKind) {
+    strengthSentence = `You've got ${handLabel} — one of the strongest hands at this stage.`;
+  } else if (handRank === HandRank.TwoPair) {
+    strengthSentence = `Two pair (${handLabel}) is strong but beatable by trips or straights.`;
+  } else if (handRank === HandRank.OnePair) {
+    // Determine the rank of the paired cards.
+    const pairRank: number = getPairRank(holeCards, communityCards, evaluated);
+    if (pairRank >= 10) {
+      strengthSentence = `Top pair is worth playing, but watch for signs the opponent has two pair or trips.`;
+    } else {
+      strengthSentence = `A small pair can win unimproved but is easily beaten — don't inflate the pot.`;
+    }
+  } else {
+    strengthSentence = `You don't have a made hand yet.`;
+  }
+
+  // Ingredient 2: draw sentence (only on flop and turn).
+  let drawSentence: string = "";
+  if (phase === "flop" || phase === "turn") {
+    const draw = getDrawDetails(holeCards, communityCards, phase);
+    if (draw) {
+      if (
+        draw.type === "straight-flush" ||
+        draw.type === "open-ended-straight-flush"
+      ) {
+        drawSentence = `You're one card from a straight flush — this is a massive draw (~${draw.equity}% to hit). Raising is aggressive but the payoff is enormous.`;
+      } else if (draw.type === "flush" || draw.type === "open-ended-straight") {
+        drawSentence = `You have a ${draw.label} (${draw.outs} outs, ~${draw.equity}% to complete). Drawing hands play best as calls unless the pot is big.`;
+      } else if (draw.type === "gutshot") {
+        drawSentence = `A gutshot only hits about ${draw.equity}% of the time — worth a cheap call, never worth a raise.`;
+      } else if (draw.type === "overcards") {
+        drawSentence = `Your overcards can still improve (~${draw.equity}% to pair up), but they're a weak reason to raise.`;
+      }
+    }
+  }
+
+  // Edge case: weak hand + raise recommended (e.g. coach normally wouldn't suggest this).
+  if (
+    recommendation === "raise" &&
+    handRank === HandRank.HighCard &&
+    drawSentence === ""
+  ) {
+    return `The coach is suggesting a bluff — this is high-risk.`;
+  }
+
+  // Ingredient 3: action framing.
+  let actionSentence: string;
+  if (recommendation === "fold") {
+    actionSentence = "Folding cuts your losses here.";
+  } else if (recommendation === "call") {
+    actionSentence = "Calling keeps you in without building a pot you might not win.";
+  } else {
+    actionSentence = "Raising charges the opponent to see the next card.";
+  }
+
+  // Compose the three ingredients, skipping empty ones, and trim excess whitespace.
+  const parts = [strengthSentence, drawSentence, actionSentence].filter(
+    (p) => p.length > 0
+  );
+  return parts.join(" ").replace(/\s{2,}/g, " ").trimEnd();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INTERNAL: RATIONALE HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Builds a human-readable label for a two-card starting hand.
+ *
+ * Examples: "Pocket aces", "King-queen suited", "Seven-two offsuit".
+ *
+ * @param holeCards - The player's two private cards.
+ * @returns A friendly label string.
+ */
+export function buildHoleCardsLabel(holeCards: Card[]): string {
+  const r1: number = holeCards[0].rank;
+  const r2: number = holeCards[1].rank;
+  const isPair: boolean = r1 === r2;
+  const isSuited: boolean = holeCards[0].suit === holeCards[1].suit;
+
+  if (isPair) {
+    const name: string = RANK_NAMES[r1];
+    const plural: string = name + "s";
+    return `Pocket ${plural.toLowerCase()}`;
+  }
+
+  const high: number = Math.max(r1, r2);
+  const low: number = Math.min(r1, r2);
+  const highName: string = RANK_NAMES[high];
+  const lowName: string = RANK_NAMES[low];
+  const suitedLabel: string = isSuited ? "suited" : "offsuit";
+
+  return `${highName}-${lowName.toLowerCase()} ${suitedLabel}`;
+}
+
+/**
+ * Returns the numeric rank of the pair in a OnePair hand.
+ * Falls back to 0 if no pair is found (should not happen when handRank === OnePair).
+ *
+ * @param holeCards      - The player's hole cards.
+ * @param communityCards - The community cards.
+ * @param evaluated      - The pre-evaluated hand.
+ * @returns The rank of the pair.
+ */
+function getPairRank(
+  holeCards: Card[],
+  communityCards: Card[],
+  evaluated: EvaluatedHand
+): number {
+  // The pair rank is embedded in the score. A one-pair score is:
+  //   rank * 1_000_000 + pairRank * 10_000 + kickers...
+  // Extracting: Math.floor((score % 1_000_000) / 10_000) gives pairRank.
+  // Use a simple fallback: scan all cards for the first matching pair.
+  const allCards: Card[] = [...holeCards, ...communityCards];
+  const rankCounts: Record<number, number> = {};
+  for (const card of allCards) {
+    rankCounts[card.rank] = (rankCounts[card.rank] ?? 0) + 1;
+  }
+  // Return the highest-ranked card that appears exactly twice.
+  const pairRanks: number[] = Object.entries(rankCounts)
+    .filter(([, count]) => count >= 2)
+    .map(([rank]) => Number(rank));
+  if (pairRanks.length === 0) return 0;
+  return Math.max(...pairRanks);
 }

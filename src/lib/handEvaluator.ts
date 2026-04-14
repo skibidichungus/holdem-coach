@@ -305,11 +305,71 @@ function buildLabel(handRank: HandRank, primaryKickers: Rank[]): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  HELPER: CARD SORTER
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Sorts 5 cards so the most semantically important ones appear first.
+ *
+ * Pairs / trips / quads / full house: matching-rank cards come first
+ * (grouped by count, highest count first), then kickers descending.
+ *
+ * Straight / straight flush: descending rank, except the ace-low wheel
+ * (A-2-3-4-5) returns 5-4-3-2-A so the 5 (high card) leads.
+ *
+ * Flush / high card: all cards descending by rank.
+ *
+ * @param cards    - The 5 cards to reorder.
+ * @param handRank - The detected HandRank, used to pick the sort strategy.
+ * @returns A new array of the same 5 cards in display-friendly order.
+ */
+function sortCards(cards: Card[], handRank: HandRank): Card[] {
+  const sorted = [...cards];
+
+  // Straight / Straight flush: descending order, with wheel special-case.
+  if (
+    handRank === HandRank.Straight ||
+    handRank === HandRank.StraightFlush ||
+    handRank === HandRank.RoyalFlush
+  ) {
+    const ranks = sorted.map((c) => c.rank).sort((a, b) => b - a);
+    const isWheel =
+      ranks[0] === 14 && ranks[1] === 5 && ranks[4] === 2;
+    if (isWheel) {
+      // Move ace to the end: 5-4-3-2-A.
+      const ace = sorted.find((c) => c.rank === 14)!;
+      const rest = sorted.filter((c) => c.rank !== 14).sort((a, b) => b.rank - a.rank);
+      return [...rest, ace];
+    }
+    return sorted.sort((a, b) => b.rank - a.rank);
+  }
+
+  // Flush / High card: simple descending order.
+  if (handRank === HandRank.Flush || handRank === HandRank.HighCard) {
+    return sorted.sort((a, b) => b.rank - a.rank);
+  }
+
+  // For matched-rank hands (pairs, trips, quads, full house, two pair):
+  // Group cards by rank count, highest-count groups first; within each
+  // group and among kickers, sort descending by rank.
+  const rankCounts = getRankCounts(sorted);
+  return sorted.sort((a, b) => {
+    const countA = rankCounts.get(a.rank) ?? 1;
+    const countB = rankCounts.get(b.rank) ?? 1;
+    // Higher count = more important — sort descending by count.
+    if (countB !== countA) return countB - countA;
+    // Same count group — sort descending by rank.
+    return b.rank - a.rank;
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
 //  CORE: EVALUATE EXACTLY FIVE CARDS
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Evaluates a single 5-card hand and returns its rank, score, and label.
+ * Evaluates a single 5-card hand and returns its rank, score, label, and cards.
  *
  * This is the core evaluation engine. The public `evaluateHand` function
  * calls this once per 5-card combination and keeps the best result.
@@ -320,7 +380,7 @@ function buildLabel(handRank: HandRank, primaryKickers: Rank[]): string {
  * (e.g. a hand can't be both a full house and a flush).
  *
  * @param cards - Exactly 5 cards to evaluate.
- * @returns An EvaluatedHand with the rank, a comparable score, and a label.
+ * @returns An EvaluatedHand with the rank, a comparable score, a label, and ordered cards.
  */
 function evaluateFiveCards(cards: Card[]): EvaluatedHand {
   // ── Step 1: Gather fundamental information about the hand ──
@@ -375,6 +435,7 @@ function evaluateFiveCards(cards: Card[]): EvaluatedHand {
       rank: HandRank.RoyalFlush,
       score: computeScore(HandRank.RoyalFlush, [14]),
       label: buildLabel(HandRank.RoyalFlush, []),
+      cards: sortCards(cards, HandRank.RoyalFlush),
     };
   }
 
@@ -386,6 +447,7 @@ function evaluateFiveCards(cards: Card[]): EvaluatedHand {
       rank: HandRank.StraightFlush,
       score: computeScore(HandRank.StraightFlush, [straightHighCard!]),
       label: buildLabel(HandRank.StraightFlush, [straightHighCard!]),
+      cards: sortCards(cards, HandRank.StraightFlush),
     };
   }
 
@@ -398,6 +460,7 @@ function evaluateFiveCards(cards: Card[]): EvaluatedHand {
       rank: HandRank.FourOfAKind,
       score: computeScore(HandRank.FourOfAKind, [quadRank, kicker]),
       label: buildLabel(HandRank.FourOfAKind, [quadRank]),
+      cards: sortCards(cards, HandRank.FourOfAKind),
     };
   }
 
@@ -412,77 +475,76 @@ function evaluateFiveCards(cards: Card[]): EvaluatedHand {
       rank: HandRank.FullHouse,
       score: computeScore(HandRank.FullHouse, [tripRank, pairRank]),
       label: buildLabel(HandRank.FullHouse, [tripRank, pairRank]),
+      cards: sortCards(cards, HandRank.FullHouse),
     };
   }
 
   // --- Flush ---
   // All five cards share the same suit but do NOT form a straight.
-  // All five ranks matter for tie-breaking (e.g. A-K-9-7-3 flush beats
-  // A-K-9-7-2 flush because the fifth kicker 3 > 2).
   if (flush) {
     return {
       rank: HandRank.Flush,
       score: computeScore(HandRank.Flush, sortedRanks),
       label: buildLabel(HandRank.Flush, [sortedRanks[0]]),
+      cards: sortCards(cards, HandRank.Flush),
     };
   }
 
   // --- Straight ---
   // Five consecutive ranks, but NOT all the same suit.
-  // Only the high card matters — no other kickers are possible.
   if (straight) {
     return {
       rank: HandRank.Straight,
       score: computeScore(HandRank.Straight, [straightHighCard!]),
       label: buildLabel(HandRank.Straight, [straightHighCard!]),
+      cards: sortCards(cards, HandRank.Straight),
     };
   }
 
   // --- Three of a Kind ---
   // Three cards of the same rank; the other two are unrelated singles.
-  // Kickers: trip rank first, then the two singles in descending order.
   if (trips.length === 1 && pairs.length === 0) {
     const tripRank: Rank = trips[0];
     return {
       rank: HandRank.ThreeOfAKind,
       score: computeScore(HandRank.ThreeOfAKind, [tripRank, ...singles]),
       label: buildLabel(HandRank.ThreeOfAKind, [tripRank]),
+      cards: sortCards(cards, HandRank.ThreeOfAKind),
     };
   }
 
   // --- Two Pair ---
   // Two different pairs plus one kicker.
-  // Kickers: high pair, low pair, then the single card.
   if (pairs.length === 2) {
-    const highPair: Rank = pairs[0]; // Already sorted descending above.
+    const highPair: Rank = pairs[0];
     const lowPair: Rank = pairs[1];
     const kicker: Rank = singles[0];
     return {
       rank: HandRank.TwoPair,
       score: computeScore(HandRank.TwoPair, [highPair, lowPair, kicker]),
       label: buildLabel(HandRank.TwoPair, [highPair, lowPair]),
+      cards: sortCards(cards, HandRank.TwoPair),
     };
   }
 
   // --- One Pair ---
   // Exactly one pair plus three kickers.
-  // Kickers: pair rank first, then all three singles descending.
   if (pairs.length === 1) {
     const pairRank: Rank = pairs[0];
     return {
       rank: HandRank.OnePair,
       score: computeScore(HandRank.OnePair, [pairRank, ...singles]),
       label: buildLabel(HandRank.OnePair, [pairRank]),
+      cards: sortCards(cards, HandRank.OnePair),
     };
   }
 
   // --- High Card ---
-  // No pairs, no straight, no flush — the hand is defined entirely
-  // by its five individual card ranks in descending order.
   return {
     rank: HandRank.HighCard,
     score: computeScore(HandRank.HighCard, sortedRanks),
     label: buildLabel(HandRank.HighCard, [sortedRanks[0]]),
+    cards: sortCards(cards, HandRank.HighCard),
   };
 }
 

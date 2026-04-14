@@ -1,13 +1,15 @@
 "use client";
 
 import { usePokerStore } from "../store/usePokerStore";
-import type { Card } from "../lib/types";
+import type { Card, Position } from "../lib/types";
+import { getBlindRoles } from "../store/usePokerStore";
 
 import CardView from "./CardView";
 import ActionButtons from "./ActionButtons";
 import CoachPanel from "./CoachPanel";
 import PhaseBanner from "./PhaseBanner";
 import TutorialOverlay from "./TutorialOverlay";
+import { HandBreakdownPanel } from "./HandBreakdownPanel";
 
 // ═══════════════════════════════════════════════════════════════
 //  POKER TABLE — MAIN GAME LAYOUT
@@ -41,10 +43,20 @@ export default function PokerTable()  {
   const winner = usePokerStore((state) => state.winner);
   const tutorial = usePokerStore((state) => state.tutorial);
   const continueTutorial = usePokerStore((state) => state.continueTutorial);
-  const resetGame = usePokerStore((state) => state.resetGame);
+  const startNextHand = usePokerStore((state) => state.startNextHand);
+  const startNewSession = usePokerStore((state) => state.startNewSession);
   // Hand labels are populated at showdown so the player can see both hands.
   const playerHandLabel: string | null = usePokerStore((state) => state.playerHandLabel);
   const opponentHandLabel: string | null = usePokerStore((state) => state.opponentHandLabel);
+  const opponentLastAction = usePokerStore((state) => state.opponentLastAction);
+  // Session state
+  const dealerButton: Position = usePokerStore((state) => state.dealerButton);
+  const smallBlind: number = usePokerStore((state) => state.smallBlind);
+  const handNumber: number = usePokerStore((state) => state.handNumber);
+  const sessionOver: boolean = usePokerStore((state) => state.sessionOver);
+
+  // Derive SB/BB roles for both seats from the current button position.
+  const blindRoles = getBlindRoles(dealerButton);
 
   // Should the opponent's cards be visible?
   // Only at showdown (so the player can see what they were up against).
@@ -78,13 +90,23 @@ export default function PokerTable()  {
           }}
         />
 
-        {/* ────────────────────────────────────────────────────
+        {/* ────────────────────────────────────────────────
             SECTION 1: OPPONENT'S CARDS (top of the table)
-        ──────────────────────────────────────────────────── */}
+        ──────────────────────────────────────────────── */}
         <div className="relative z-10 flex flex-col items-center gap-2">
-          <span className="text-xs font-medium uppercase tracking-wider text-emerald-300/70">
-            {opponent.name}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wider text-emerald-300/70">
+              {opponent.name}
+            </span>
+            {/* Dealer button badge — shown when opponent holds the button */}
+            {dealerButton === "opponent" && (
+              <span className="bg-amber-500/90 border border-amber-400/50 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                D
+              </span>
+            )}
+            {/* SB/BB blind role badge */}
+            <BlindRoleBadge role={blindRoles.opponent} />
+          </div>
 
           <div className="flex gap-2">
             {opponent.hand.length > 0 ? (
@@ -109,14 +131,24 @@ export default function PokerTable()  {
           {showOpponentCards && opponentHandLabel !== null && (
             <HandLabelBadge label={opponentHandLabel} side="opponent" />
           )}
+
+          {/* Opponent's last action badge — visible whenever the opponent has acted */}
+          {opponentLastAction !== null && (
+            <OpponentActionBadge action={opponentLastAction} />
+          )}
         </div>
 
-        {/* ────────────────────────────────────────────────────
+        {/* ────────────────────────────────────────────────
             SECTION 2: PHASE BANNER + COMMUNITY CARDS (center)
-        ──────────────────────────────────────────────────── */}
+        ──────────────────────────────────────────────── */}
         <div className="relative z-10 flex flex-col items-center gap-4 my-2">
           {/* Phase banner + community cards */}
           <PhaseBanner phase={phase} pot={pot} />
+
+          {/* Blind level and hand number — small, muted, near the pot/banner */}
+          <span className="text-xs text-slate-400">
+            Blinds {smallBlind}/{smallBlind * 2} · Hand #{handNumber}
+          </span>
 
           {/* Community cards — shown as they're dealt (3 on flop, +1 turn, +1 river) */}
           <div className="flex gap-2 min-h-[100px] items-center">
@@ -140,6 +172,16 @@ export default function PokerTable()  {
         </div>
 
         {/* ────────────────────────────────────────────────────
+            SECTION 2.5: HAND BREAKDOWN PANEL
+            Shows the player's best 5-card hand as card visuals,
+            with a plain-English label and draw info if applicable.
+            Visible from deal through showdown in both modes.
+        ──────────────────────────────────────────────────── */}
+        <div className="relative z-10 w-full px-2">
+          <HandBreakdownPanel />
+        </div>
+
+        {/* ────────────────────────────────────────────────────
             SECTION 3: PLAYER'S CARDS + ACTIONS (bottom)
         ──────────────────────────────────────────────────── */}
         <div className="relative z-10 flex flex-col items-center gap-4">
@@ -160,9 +202,19 @@ export default function PokerTable()  {
             )}
           </div>
 
-          <span className="text-xs font-medium uppercase tracking-wider text-emerald-300/70">
-            {player.name} — {player.chips} chips
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wider text-emerald-300/70">
+              {player.name} — {player.chips} chips
+            </span>
+            {/* Dealer button badge — shown when player holds the button */}
+            {dealerButton === "player" && (
+              <span className="bg-amber-500/90 border border-amber-400/50 text-slate-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                D
+              </span>
+            )}
+            {/* SB/BB blind role badge */}
+            <BlindRoleBadge role={blindRoles.player} />
+          </div>
 
           {/* Player's hand label badge — only visible at showdown */}
           {phase === "showdown" && playerHandLabel !== null && (
@@ -171,8 +223,13 @@ export default function PokerTable()  {
 
           {/* ── Action buttons or result display ── */}
           {winner !== null ? (
-            // Hand is over — show result and a "Play Again" button.
-            <ResultBanner winner={winner} onPlayAgain={resetGame} />
+            // Hand is over — show result, then a context-aware continuation button.
+            <ResultBanner
+              winner={winner}
+              sessionOver={sessionOver}
+              onNextHand={startNextHand}
+              onNewSession={startNewSession}
+            />
           ) : (
             // Hand is still in progress — show action buttons.
             <ActionButtons />
@@ -273,17 +330,24 @@ function CardPlaceholder()  {
 interface ResultBannerProps {
   /** Who won: "player", "opponent", or "tie". */
   winner: "player" | "opponent" | "tie";
-  /** Callback to start a new hand. */
-  onPlayAgain: () => void;
+  /** True when the session has ended due to a player busting out. */
+  sessionOver: boolean;
+  /** Callback to deal the next hand in the current session. */
+  onNextHand: () => void;
+  /** Callback to start a brand new session (resets everything). */
+  onNewSession: () => void;
 }
 
 /**
  * Displayed at showdown once a winner is determined.
- * Shows the result with an appropriate emoji and a "Play Again" button.
+ * Shows the result, then either a "Next Hand" button (session continues)
+ * or a "New Session" button (session ended due to bust).
  */
 function ResultBanner({
   winner,
-  onPlayAgain,
+  sessionOver,
+  onNextHand,
+  onNewSession,
 }: ResultBannerProps)  {
   // Build the result text and pick a symbol.
   let resultText: string;
@@ -319,22 +383,122 @@ function ResultBanner({
         </span>
       </div>
 
-      <button
-        id="play-again-btn"
-        onClick={onPlayAgain}
-        className="
-          px-6 py-2.5
-          bg-emerald-600 hover:bg-emerald-500
-          active:bg-emerald-700
-          text-white font-semibold text-sm
-          rounded-lg
-          transition-colors duration-150
-          shadow-md hover:shadow-lg
-          cursor-pointer
-        "
-      >
-        Play Again
-      </button>
+      {sessionOver ? (
+        // Session ended — one player is busted.
+        <button
+          id="new-session-btn"
+          onClick={onNewSession}
+          className="
+            px-6 py-2.5
+            bg-amber-600 hover:bg-amber-500
+            active:bg-amber-700
+            text-white font-semibold text-sm
+            rounded-lg
+            transition-colors duration-150
+            shadow-md hover:shadow-lg
+            cursor-pointer
+          "
+        >
+          New Session
+        </button>
+      ) : (
+        // Session continues — deal the next hand.
+        <button
+          id="next-hand-btn"
+          onClick={onNextHand}
+          className="
+            px-6 py-2.5
+            bg-emerald-600 hover:bg-emerald-500
+            active:bg-emerald-700
+            text-white font-semibold text-sm
+            rounded-lg
+            transition-colors duration-150
+            shadow-md hover:shadow-lg
+            cursor-pointer
+          "
+        >
+          Next Hand
+        </button>
+      )}
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SUB-COMPONENT: OPPONENT ACTION BADGE
+// ═══════════════════════════════════════════════════════════════
+
+interface OpponentActionBadgeProps {
+  /** The opponent's most recent action. */
+  action: "fold" | "call" | "raise";
+}
+
+/**
+ * A small pill badge that shows the opponent's last action.
+ * Appears just below the opponent's cards after every phase they act.
+ *
+ * Color scheme:
+ *   fold  → red/danger
+ *   call  → slate/neutral
+ *   raise → amber/warning
+ */
+function OpponentActionBadge({ action }: OpponentActionBadgeProps) {
+  const colorClass: string =
+    action === "fold"
+      ? "bg-red-600/80 border-red-500/40 text-red-100"
+      : action === "raise"
+        ? "bg-amber-600/80 border-amber-500/40 text-amber-100"
+        : "bg-slate-600/80 border-slate-500/40 text-slate-200";
+
+  const label: string =
+    action === "fold" ? "Folds" : action === "raise" ? "Raises" : "Calls";
+
+  return (
+    <div
+      className={`
+        inline-flex items-center gap-1.5
+        px-3 py-1
+        rounded-full
+        border
+        text-xs font-semibold
+        animate-card-in
+        ${colorClass}
+      `}
+    >
+      <span>{label}</span>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SUB-COMPONENT: BLIND ROLE BADGE
+// ═══════════════════════════════════════════════════════════════
+
+interface BlindRoleBadgeProps {
+  /** The blind role for this seat — either the small blind or big blind. */
+  role: "SB" | "BB";
+}
+
+/**
+ * A small pill badge that shows whether a seat is the small blind (SB)
+ * or the big blind (BB) this hand. Intentionally lighter than the dealer
+ * button badge — the button is the newer concept worth emphasizing.
+ *
+ * Color scheme:
+ *   SB → sky-600   (smaller obligation; acts first preflop in heads-up)
+ *   BB → violet-600 (larger obligation; acts last preflop in heads-up)
+ */
+function BlindRoleBadge({ role }: BlindRoleBadgeProps) {
+  const colorClass: string =
+    role === "SB"
+      ? "bg-sky-600/80 border border-sky-500/40 text-sky-100"
+      : "bg-violet-600/80 border border-violet-500/40 text-violet-100";
+
+  return (
+    <span
+      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${colorClass}`}
+    >
+      {role}
+    </span>
   );
 }
