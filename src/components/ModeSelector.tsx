@@ -26,10 +26,20 @@ const MODE_OPTIONS: ModeOption[] = [
  * A two-segment control that switches the game between "guided"
  * and "quick" modes. Restarts the hand on switch so the change
  * takes effect without a stale half-guided state.
+ *
+ * Also renders a subtle "Clear saved game" link that wipes localStorage
+ * and starts a fresh session immediately.
  */
 export default function ModeSelector() {
   const mode: GameMode = usePokerStore((state) => state.mode);
   const setMode = usePokerStore((state) => state.setMode);
+  const startNewSession = usePokerStore((state) => state.startNewSession);
+
+  function handleClearSavedGame(): void {
+    // Wipe the persisted localStorage entry, then reset in-memory state.
+    usePokerStore.persist.clearStorage();
+    startNewSession();
+  }
 
   return (
     <div className="flex flex-col items-center gap-1.5">
@@ -101,6 +111,16 @@ export default function ModeSelector() {
           );
         })}
       </div>
+
+      {/* ── Clear saved game escape hatch ── */}
+      {/* Visually subtle — a muted text link, not a prominent button. */}
+      <button
+        id="clear-saved-game"
+        onClick={handleClearSavedGame}
+        className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 transition-colors duration-150 mt-0.5"
+      >
+        Clear saved game
+      </button>
     </div>
   );
 }

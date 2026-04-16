@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 // ─── Type imports ────────────────────────────────────────────
 import type {
@@ -24,6 +25,7 @@ import {
   getDrawDetails,
   getRecommendationRationale,
   getShowdownMessage,
+  getSessionOverMessage,
 } from "../lib/tutorial";
 import {
   getSmallBlindForHand,
@@ -208,7 +210,9 @@ export function getBlindRoles(
  * const initializeGame = usePokerStore((state) => state.initializeGame);
  * ```
  */
-export const usePokerStore = create<PokerState>((set, get) => ({
+export const usePokerStore = create<PokerState>()(
+  persist(
+    (set, get) => ({
   // ── Initial state ──────────────────────────────────────────
   mode: "guided",
   // Session defaults — overwritten by startNewSession / startNextHand.
@@ -465,10 +469,7 @@ export const usePokerStore = create<PokerState>((set, get) => ({
     if (newPlayerChips === 0 || newOpponentChips === 0) {
       const sessionWinner: "player" | "opponent" =
         newPlayerChips > 0 ? "player" : "opponent";
-      const sessionMessage: string =
-        sessionWinner === "player"
-          ? "You busted the opponent — you win the session! Click 'New Session' to play again."
-          : "You're out of chips — the opponent wins the session. Click 'New Session' to try again.";
+      const sessionMessage: string = getSessionOverMessage(sessionWinner);
 
       set({
         player: { ...state.player, chips: newPlayerChips },
@@ -1055,4 +1056,53 @@ export const usePokerStore = create<PokerState>((set, get) => ({
       get().startNewSession();
     }
   },
-}));
+}),
+{
+  name: "holdem-coach-session",
+  storage: createJSONStorage(() => localStorage),
+  // Only persist session-level fields. Hand-level state (deck, community
+  // cards, tutorial messages, pot, phase, hole cards) is always regenerated
+  // from scratch on the next deal — persisting it would triple complexity
+  // for a minor UX benefit.
+  partialize: (state) => ({
+    mode: state.mode,
+    handNumber: state.handNumber,
+    dealerButton: state.dealerButton,
+    smallBlind: state.smallBlind,
+    sessionOver: state.sessionOver,
+    sessionWinner: state.sessionWinner,
+    playerChips: state.player.chips,
+    opponentChips: state.opponent.chips,
+  }),
+  // Explicit merge keeps the full current-state shape and only overlays the
+  // persisted fields we care about, flattening chip counts into the nested
+  // player / opponent objects. Without this, the default shallow merge would
+  // strip player.hand / opponent.hand / etc. to empty.
+  merge: (persisted, current) => {
+    const p = (persisted ?? {}) as Partial<{
+      mode: GameMode;
+      handNumber: number;
+      dealerButton: Position;
+      smallBlind: number;
+      sessionOver: boolean;
+      sessionWinner: "player" | "opponent" | null;
+      playerChips: number;
+      opponentChips: number;
+    }>;
+    return {
+      ...current,
+      mode: p.mode ?? current.mode,
+      handNumber: p.handNumber ?? current.handNumber,
+      dealerButton: p.dealerButton ?? current.dealerButton,
+      smallBlind: p.smallBlind ?? current.smallBlind,
+      sessionOver: p.sessionOver ?? current.sessionOver,
+      sessionWinner: p.sessionWinner ?? current.sessionWinner,
+      player: { ...current.player, chips: p.playerChips ?? current.player.chips },
+      opponent: { ...current.opponent, chips: p.opponentChips ?? current.opponent.chips },
+    };
+  },
+  // Bump this if the persisted schema changes — old saved data will be discarded.
+  version: 1,
+}
+  )
+);

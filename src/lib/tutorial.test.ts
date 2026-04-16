@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getDrawDetails, getRecommendationRationale } from "./tutorial";
+import { getDrawDetails, getRecommendationRationale, getSessionOverMessage } from "./tutorial";
 import type { Card } from "./types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -283,5 +283,16 @@ describe("getDrawDetails — outsDescription", () => {
     expect(result).not.toBeNull();
     expect(result!.outsDescription).toContain("Ace");
     expect(result!.outsDescription).toContain("King");
+  });
+});
+
+// ─── getSessionOverMessage ────────────────────────────────────────────────────
+
+describe("getSessionOverMessage", () => {
+  it("returns player-wins message when player is the session winner", () => {
+    expect(getSessionOverMessage("player")).toContain("win the session");
+  });
+  it("returns opponent-wins message when opponent is the session winner", () => {
+    expect(getSessionOverMessage("opponent")).toContain("out of chips");
   });
 });

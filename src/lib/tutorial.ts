@@ -878,6 +878,28 @@ export function getDrawInfo(
   return `You have a ${details.label} — ${details.outs} outs, ~${details.equity}% to hit by the river.`;
 }
 
+// ═════════════════════════════════════════════════════════════
+//  EXPORTED: SESSION OVER MESSAGE
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Returns the end-of-session message for the bust screen.
+ *
+ * Extracted so the store's `startNextHand` action and the hydration
+ * effect in `page.tsx` both use the exact same string — no drift.
+ *
+ * @param winner - Who won the session, or null if unknown.
+ * @returns A human-readable session-result message.
+ */
+export function getSessionOverMessage(
+  winner: "player" | "opponent" | null
+): string {
+  if (winner === "player") {
+    return "You busted the opponent — you win the session! Click 'New Session' to play again.";
+  }
+  return "You're out of chips — the opponent wins the session. Click 'New Session' to try again.";
+}
+
 
 // ═════════════════════════════════════════════════════════════
 //  EXPORTED: SHOWDOWN COMPARISON MESSAGE
