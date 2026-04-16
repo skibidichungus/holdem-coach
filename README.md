@@ -29,6 +29,7 @@ The app supports two modes: **guided mode**, where gameplay pauses between phase
 - **Quick-play mode** — skip the tutorial pauses and play at speed, with coaching hints still visible
 - **Hand rankings guide** — a slide-out reference panel showing all 10 poker hand types with example cards, accessible during play
 - **Fold showdown reveal** — when you fold, the app reveals what both players had and explains whether folding was the right call
+- **Session persistence** — chip stacks, hand number, dealer button, blind level, and mode preference survive a browser refresh via localStorage, with a visible "Clear saved game" escape hatch
 
 ## Tech Stack
 
@@ -129,6 +130,5 @@ The test suite (63 tests) covers all 10 hand types, ace-low straight edge cases,
 - Clean up article grammar in outs descriptions ("a eight" → "an eight")
 
 ### Infrastructure
-- Persistent state across sessions (localStorage)
 - Deploy to Vercel
 - Analytics on which hands and decisions beginners struggle with most
